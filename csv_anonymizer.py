@@ -7,17 +7,6 @@ E.g. the account number of a bank account is used in a.csv in column 3 and in b.
 csv_anonymizer --type=number --input a.csv:3 b.cvs:4 foobar_*.cvs:6
 would anonymize the bank account number in both files in a way that bank account number 123456 is 
 anonymized to a random integer - but to the same random integer in all rows in both files.
-
-Thanks to joke2k for https://joke2k.net/faker/
-and to Benjamin Bengfort for inspiration 
-(http://blog.districtdatalabs.com/a-practical-guide-to-anonymizing-datasets-with-python-faker)
-
-TODO:
-  * number start/end
-  * delete column
-  * set fixed value in column
-  * create person dict from id (like person_id), then use firstname, lastname, etc. of this person in columns
-  * support header in csv files
 """
 
 import sys
@@ -48,7 +37,7 @@ def parseArgs():
                         help='overwrite the original file with anonymized file')
     parser.add_argument('-j', '--ignore-missing-file', dest='ignoreMissingFile', action='store_true',
                         help='if set, missing files are ignored')
-    parser.add_argument('-e', '--has-header', dest='hasHeader', action='store_true',
+    parser.add_argument('-1', '--has-header', dest='hasHeader', action='store_true',
                         help='if set, use first line of csv files as header')
     return parser.parse_args()
 
