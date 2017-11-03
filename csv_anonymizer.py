@@ -17,6 +17,7 @@ TODO:
   * delete column
   * set fixed value in column
   * create person dict from id (like person_id), then use firstname, lastname, etc. of this person in columns
+  * support header in csv files
 """
 
 import sys
@@ -47,6 +48,8 @@ def parseArgs():
                         help='overwrite the original file with anonymized file')
     parser.add_argument('-j', '--ignore-missing-file', dest='ignoreMissingFile', action='store_true',
                         help='if set, missing files are ignored')
+    parser.add_argument('-e', '--has-header', dest='hasHeader', action='store_true',
+                        help='if set, use first line of csv files as header')
     return parser.parse_args()
 
 
@@ -75,7 +78,7 @@ def anonymize_rows(rows, column):
         yield row
 
 
-def anonymize(source, target, column):
+def anonymize(source, target, column, hasHeader):
     """
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
@@ -87,6 +90,8 @@ def anonymize(source, target, column):
             writer = csv.writer(outputfile, delimiter=';', lineterminator='\n')
 
             # Read and anonymize data, writing to target file.
+            if hasHeader:
+                writer.writerow(next(reader))
             for row in anonymize_rows(reader, column):
                 writer.writerow(row)
 
@@ -125,7 +130,7 @@ if __name__ == '__main__':
             if os.path.isfile(source):
                 print('anonymizing file %s column %d as type %s to file %s' %
                     (source, column_index, ARGS.type, target))
-                anonymize(source, target, column_index)
+                anonymize(source, target, column_index, ARGS.hasHeader)
                 # move anonymized file to original file
                 if ARGS.overwrite:
                     print('overwriting original file %s with anonymzed file!' % source)
