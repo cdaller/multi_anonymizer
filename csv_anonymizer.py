@@ -15,12 +15,17 @@ import os.path
 import csv
 import glob
 import faker
+from faker.providers import BaseProvider
+from faker.providers import date_time
+
 
 from faker import Faker
 from faker import Factory
 from collections import defaultdict
 import argparse
 import random
+
+import string
 
 
 def parseArgs():
@@ -46,6 +51,35 @@ if len(sys.argv) < 1:
     print('Usage: anon.py <source> [<source> ...]')
     sys.exit(1)
 
+
+class IBANProvider(BaseProvider):
+    
+    ALPHA = {c: str(ord(c) % 55) for c in string.ascii_uppercase}
+    country_codes = [tz['code'] for tz in date_time.Provider.countries]
+
+    def makeIban(self, ispb, agency, account, country='BR', account_type='C', account_owner='1'):
+        """
+        from https://github.com/lkraider/iban-generator/blob/master/iban.py
+        """
+
+        assert(len(ispb) == 8)
+        assert(len(agency) <= 5)
+        assert(len(account) <= 10)
+        agency = agency.zfill(5)
+        account = account.zfill(10)
+        iban = ispb + agency + account + account_type + account_owner
+        check = iban + country + '00'
+        check = int(''.join(self.ALPHA.get(c, c) for c in check))
+        check = 98 - (check % 97)
+        check = str(check).zfill(2)
+        return country + check + iban
+
+    def iban(self):
+        isbp = str(self.random_int(10000000, 99999999))
+        agency = str(self.random_int(10000, 99999))
+        account = str(self.random_int(1000000000, 9999999999))
+        countryCode = self.random_element(self.country_codes)
+        return self.makeIban(isbp, agency, account, countryCode)
 
 def getRandomInt(start=0, end=1000000):
     return lambda: random.randint(start, end)
@@ -89,6 +123,8 @@ if __name__ == '__main__':
     ARGS = parseArgs()
 
     FAKER = Factory.create(ARGS.locale)
+    FAKER.add_provider(IBANProvider)
+
 
     # Create mappings of names & emails to faked names & emails.
     if ARGS.type == 'name':
@@ -107,6 +143,8 @@ if __name__ == '__main__':
         FAKE_DICT = defaultdict(FAKER.city)
     if ARGS.type == 'street':
         FAKE_DICT = defaultdict(FAKER.street_address)
+    if ARGS.type == 'iban':
+        FAKE_DICT = defaultdict(FAKER.iban)
 
     for infile in ARGS.input:
         parts = infile.split(':')
