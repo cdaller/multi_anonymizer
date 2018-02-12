@@ -23,13 +23,13 @@ The testfiles directory contains some test csv files:
 Anonymize the person id in all files, first and last name in persons file
 
 ``` sh
-./csv_anonymizer.py --has-header \
+./csv_anonymizer.py --header-lines 1 \
   --input testfiles/persons.csv:0 testfiles/adresses.csv:1 
 
-./csv_anonymizer.py --has-header  --overwrite --type first_name \
+./csv_anonymizer.py --header-lines 1  --overwrite --type first_name \
   --input testfiles/persons.csv_anonymized:1
 
-./csv_anonymizer.py --has-header --overwrite --type last_name \
+./csv_anonymizer.py --header-lines 1 --overwrite --type last_name \
   --input testfiles/persons.csv_anonymized:2
 ```
 

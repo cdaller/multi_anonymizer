@@ -42,8 +42,8 @@ def parseArgs():
                         help='overwrite the original file with anonymized file')
     parser.add_argument('-j', '--ignore-missing-file', dest='ignoreMissingFile', action='store_true',
                         help='if set, missing files are ignored')
-    parser.add_argument('-1', '--has-header', dest='hasHeader', action='store_true',
-                        help='if set, use first line of csv files as header')
+    parser.add_argument('--header-lines', dest='headerLines', default='0',
+                        help='set to number of header lines to ignore, default = 0')
     return parser.parse_args()
 
 
@@ -91,7 +91,7 @@ def anonymize_rows(rows, column):
         yield row
 
 
-def anonymize(source, target, column, hasHeader):
+def anonymize(source, target, column, headerLines):
     """
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
@@ -103,8 +103,10 @@ def anonymize(source, target, column, hasHeader):
             writer = csv.writer(outputfile, delimiter=';', lineterminator='\n')
 
             # Read and anonymize data, writing to target file.
-            if hasHeader:
+            skipLines = headerLines;
+            while (skipLines > 0):
                 writer.writerow(next(reader))
+                skipLines = skipLines - 1
             for row in anonymize_rows(reader, column):
                 writer.writerow(row)
 
@@ -128,9 +130,13 @@ if __name__ == '__main__':
         FAKE_DICT = defaultdict(FAKER.email)
     if ARGS.type == 'zip':
         FAKE_DICT = defaultdict(FAKER.postcode)
+    if ARGS.type == 'postcode':
+        FAKE_DICT = defaultdict(FAKER.postcode)
     if ARGS.type == 'city':
         FAKE_DICT = defaultdict(FAKER.city)
     if ARGS.type == 'street':
+        FAKE_DICT = defaultdict(FAKER.street_address)
+    if ARGS.type == 'street_address':
         FAKE_DICT = defaultdict(FAKER.street_address)
     if ARGS.type == 'iban':
         FAKE_DICT = defaultdict(FAKER.iban)
@@ -146,7 +152,7 @@ if __name__ == '__main__':
             if os.path.isfile(source):
                 print('anonymizing file %s column %d as type %s to file %s' %
                     (source, column_index, ARGS.type, target))
-                anonymize(source, target, column_index, ARGS.hasHeader)
+                anonymize(source, target, column_index, int(ARGS.headerLines))
                 # move anonymized file to original file
                 if ARGS.overwrite:
                     print('overwriting original file %s with anonymzed file!' % source)
