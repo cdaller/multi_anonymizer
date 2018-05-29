@@ -13,7 +13,7 @@ import sys
 import shutil
 import os.path
 import csv
-import glob
+import glob2 as glob
 import faker
 from faker.providers import BaseProvider
 from faker.providers import date_time
@@ -140,6 +140,12 @@ if __name__ == '__main__':
         FAKE_DICT = defaultdict(FAKER.street_address)
     if ARGS.type == 'iban':
         FAKE_DICT = defaultdict(FAKER.iban)
+    if ARGS.type == 'sentence':
+        FAKE_DICT = defaultdict(FAKER.sentence)
+    if ARGS.type == 'word':
+        FAKE_DICT = defaultdict(FAKER.word)
+    if ARGS.type == 'text':
+        FAKE_DICT = defaultdict(FAKER.text)
 
     for infile in ARGS.input:
         parts = infile.split(':')

@@ -10,10 +10,11 @@ anonymized to a random integer - but to the same random integer in all rows in b
 
 ## Installation
 
-Install faker python library:
+Install faker python library and other dependencies:
 
 ```
 pip3 install Faker
+pip3 install glob2
 ```
 
 ## Examples
@@ -31,6 +32,11 @@ Anonymize the person id in all files, first and last name in persons file
 
 ./csv_anonymizer.py --header-lines 1 --overwrite --type last_name \
   --input testfiles/persons.csv_anonymized:2
+
+# support wildcards in file paths (even recursive directories):
+./csv_anonymizer.py --header-lines 1 --overwrite --type last_name \
+  --input testfiles/**/?erson*s.csv_anonymized:2
+
 ```
 
 ## Thanks
