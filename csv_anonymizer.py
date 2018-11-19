@@ -51,26 +51,6 @@ if len(sys.argv) < 1:
     print('Usage: anon.py <source> [<source> ...]')
     sys.exit(1)
 
-
-class IBANProvider(BaseProvider):
-    
-    ALPHA = {c: str(ord(c) % 55) for c in string.ascii_uppercase}
-    country_codes = [tz['code'] for tz in date_time.Provider.countries]
-
-    def iban(self):
-        ispb = str(self.random_int(10000000, 99999999))
-        agency = str(self.random_int(1000, 99999))
-        account = str(self.random_int(1000000000, 9999999999))
-        countryCode = 'DE' # self.random_element(self.country_codes)
-        ispb = ispb.zfill(8)
-        account = account.zfill(10)
-        iban = ispb + account
-        check = iban + countryCode + '00'
-        check = int(''.join(self.ALPHA.get(c, c) for c in check))
-        check = 98 - (check % 97)
-        check = str(check).zfill(2)
-        return countryCode + check + iban
-
 def getRandomInt(start=0, end=1000000):
     return lambda: random.randint(start, end)
 
@@ -115,8 +95,7 @@ if __name__ == '__main__':
     ARGS = parseArgs()
 
     FAKER = Factory.create(ARGS.locale)
-    FAKER.add_provider(IBANProvider)
-
+    
     # Create mappings of names & emails to faked names & emails.
     if ARGS.type == 'name':
         FAKE_DICT = defaultdict(FAKER.name)
@@ -161,7 +140,7 @@ if __name__ == '__main__':
                 anonymize(source, target, column_index, int(ARGS.headerLines))
                 # move anonymized file to original file
                 if ARGS.overwrite:
-                    print('overwriting original file %s with anonymzed file!' % source)
+                    print('overwriting original file %s with anonymized file!' % source)
                     shutil.move(src=target, dst=source)
             else:
                 if ARGS.ignoreMissingFile:
