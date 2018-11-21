@@ -76,7 +76,7 @@ def anonymize(source, target, column, headerLines):
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
     """
-    with open(source, 'rU', encoding='ISO-8859-15') as inputfile:
+    with open(source, 'r', encoding='ISO-8859-15', newline=None) as inputfile:
         with open(target, 'w', encoding='ISO-8859-15') as outputfile:
             # Use the DictReader to easily extract fields
             reader = csv.reader(inputfile, delimiter=';')
