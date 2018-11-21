@@ -64,9 +64,9 @@ def anonymize_rows(rows, column):
 
     # Iterate over the rows and yield anonymized rows.
     for row in rows:
-        # Replace the column with faked fields if filled:
-        if len(row[column]) > 0:
-            row[column] = FAKE_DICT[row[column]]
+        # Replace the column with faked fields if filled (trim whitespace first):
+        if len(row[column].strip()) > 0:
+            row[column] = FAKE_DICT[row[column].strip()]
         # Yield the row back to the caller
         yield row
 
