@@ -33,11 +33,13 @@ def parseArgs():
     parser.add_argument('-i', '--input', nargs='+', dest='input',
                         help='inputfile1:columnindex1 [inputfile2:columnindex2], columindex starts with 0!')
     parser.add_argument('-t', '--type', dest='type', default='number',
-                        help='name, number, email')
+                        help='name, first_name, last_name, email, zip, city, address, number, ... . Default is number')
     parser.add_argument('-e', '--encoding', dest='encoding', default='ISO-8859-15',
-                        help='the encoding of the file to read/write')
+                        help='the encoding of the file to read/write. Default is ISO-8859-15')
+    parser.add_argument('-d', '--delimiter', dest='delimiter', default=';',
+                        help='the delimiter of the columns. For tab as delimiter use "--delimiter $\'\\t\'". Default is semicolon.')
     parser.add_argument('-l', '--locale', dest='locale', default='de_DE',
-                        help='the locale to use to generate fake data')
+                        help='the locale to use to generate fake data. Default is de_DE')
     parser.add_argument('-o', '--overwrite', dest='overwrite', action='store_true',
                         help='overwrite the original file with anonymized file')
     parser.add_argument('-j', '--ignore-missing-file', dest='ignoreMissingFile', action='store_true',
@@ -71,16 +73,16 @@ def anonymize_rows(rows, column):
         yield row
 
 
-def anonymize(source, target, column, headerLines):
+def anonymize(source, target, column, headerLines, encoding, delimiter):
     """
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
     """
-    with open(source, 'r', encoding='ISO-8859-15', newline=None) as inputfile:
-        with open(target, 'w', encoding='ISO-8859-15') as outputfile:
+    with open(source, 'r', encoding=encoding, newline=None) as inputfile:
+        with open(target, 'w', encoding=encoding) as outputfile:
             # Use the DictReader to easily extract fields
-            reader = csv.reader(inputfile, delimiter=';')
-            writer = csv.writer(outputfile, delimiter=';', lineterminator='\n')
+            reader = csv.reader(inputfile, delimiter=delimiter)
+            writer = csv.writer(outputfile, delimiter=delimiter, lineterminator='\n')
 
             # Read and anonymize data, writing to target file.
             skipLines = headerLines;
@@ -126,6 +128,12 @@ if __name__ == '__main__':
     if ARGS.type == 'text':
         FAKE_DICT = defaultdict(FAKER.text)
 
+    # special handling for tab delimiter to allow easier passing as command line:
+    if ARGS.delimiter == "\t":
+        print('Detected tab as delimiter')
+#        delimiter = '\t'
+    delimiter = ARGS.delimiter
+
     for infile in ARGS.input:
         parts = infile.split(':')
         filename = parts[0]
@@ -137,7 +145,7 @@ if __name__ == '__main__':
             if os.path.isfile(source):
                 print('anonymizing file %s column %d as type %s to file %s' %
                     (source, column_index, ARGS.type, target))
-                anonymize(source, target, column_index, int(ARGS.headerLines))
+                anonymize(source, target, column_index, int(ARGS.headerLines), ARGS.encoding, delimiter)
                 # move anonymized file to original file
                 if ARGS.overwrite:
                     print('overwriting original file %s with anonymized file!' % source)
