@@ -15,6 +15,7 @@ import os.path
 import csv
 import glob2 as glob
 import faker
+import re
 from faker.providers import BaseProvider
 from faker.providers import date_time
 
@@ -57,7 +58,7 @@ def getRandomInt(start=0, end=1000000):
     return lambda: random.randint(start, end)
 
 
-def anonymize_rows(rows, column):
+def anonymize_rows(rows, columnIndex):
     """
     Rows is an iterable of dictionaries that contain name and
     email fields that need to be anonymized.
@@ -67,13 +68,13 @@ def anonymize_rows(rows, column):
     # Iterate over the rows and yield anonymized rows.
     for row in rows:
         # Replace the column with faked fields if filled (trim whitespace first):
-        if len(row[column].strip()) > 0:
-            row[column] = FAKE_DICT[row[column].strip()]
+        if len(row[columnIndex].strip()) > 0:
+            row[columnIndex] = FAKE_DICT[row[columnIndex].strip()]
         # Yield the row back to the caller
         yield row
 
 
-def anonymize(source, target, column, headerLines, encoding, delimiter):
+def anonymize(source, target, columnIndex, headerLines, encoding, delimiter):
     """
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
@@ -85,11 +86,11 @@ def anonymize(source, target, column, headerLines, encoding, delimiter):
             writer = csv.writer(outputfile, delimiter=delimiter, lineterminator='\n')
 
             # Read and anonymize data, writing to target file.
-            skipLines = headerLines;
+            skipLines = headerLines
             while (skipLines > 0):
                 writer.writerow(next(reader))
                 skipLines = skipLines - 1
-            for row in anonymize_rows(reader, column):
+            for row in anonymize_rows(reader, columnIndex):
                 writer.writerow(row)
 
 
