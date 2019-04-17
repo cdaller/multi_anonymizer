@@ -7,6 +7,9 @@ E.g. the account number of a bank account is used in a.csv in column 3 and in b.
 csv_anonymizer --type=number --input a.csv:3 b.cvs:4 foobar_*.cvs:6
 would anonymize the bank account number in both files in a way that bank account number 123456 is 
 anonymized to a random integer - but to the same random integer in all rows in both files.
+
+Author: Christof Dallermassl
+License: MIT
 """
 
 import sys
@@ -30,7 +33,7 @@ import string
 
 
 def parseArgs():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description = 'Anonymize columns of one ore more csv files')
     parser.add_argument('-i', '--input', nargs='+', dest='input',
                         help='inputfile1:columnindex1 [inputfile2:columnindex2], columindex starts with 0!')
     parser.add_argument('-t', '--type', dest='type', default='number',
