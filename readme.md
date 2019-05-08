@@ -6,6 +6,7 @@ It is able to anonymize different columns that contain the same values from diff
 E.g. the account number of a bank account is used in a.csv in column 3 and in b.csv in column 4
 
     csv_anonymizer --type=number --input a.csv:3 b.cvs:4 foobar_*.cvs:6
+    csv_anonymizer --type=name --delimiter "," --input a.csv:3 b.cvs:4 "**/foobar_*.cvs:6"
 
 would anonymize the bank account number in both files in a way that bank account number 123456 is anonymized to a random integer - but to the same random integer in all rows in both files.
 
@@ -44,7 +45,7 @@ Anonymize the person id in all files, first and last name in persons file
 
 # support wildcards in file paths (even recursive directories):
 ./csv_anonymizer.py --header-lines 1 --overwrite --type last_name \
-  --input testfiles/**/?erson*s.csv_anonymized:2
+  --input "testfiles/**/?erson*s.csv_anonymized:2"
 ```
 
 ## Thanks
