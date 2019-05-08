@@ -3,9 +3,12 @@
 CSV Anonymizer: reads one or more csv files and anomyizes one column with a given type (e.g. name, number).
 It is able to anonymize different columns that contain the same values from different csv files.
 
-E.g. the account number of a bank account is used in a.csv in column 3 and in b.csv in column 4
+E.g. the account number of a bank account is used in a.csv in column 3 and in b.csv in column 4:
 
     csv_anonymizer --type=number --input a.csv:3 b.cvs:4 foobar_*.cvs:6
+
+Same, but with different delimter and a wildcard file selector (wildcards are handled by script, not by shell):
+
     csv_anonymizer --type=name --delimiter "," --input a.csv:3 b.cvs:4 "**/foobar_*.cvs:6"
 
 would anonymize the bank account number in both files in a way that bank account number 123456 is anonymized to a random integer - but to the same random integer in all rows in both files.
