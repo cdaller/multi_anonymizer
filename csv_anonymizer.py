@@ -22,6 +22,7 @@ import re
 from faker.providers import BaseProvider
 from faker.providers import date_time
 
+from lxml import etree
 
 from faker import Faker
 from faker import Factory
@@ -41,7 +42,7 @@ def parseArgs():
     parser.add_argument('-e', '--encoding', dest='encoding', default='ISO-8859-15',
                         help='the encoding of the file to read/write. Default is ISO-8859-15')
     parser.add_argument('-d', '--delimiter', dest='delimiter', default=';',
-                        help='the delimiter of the columns. For tab as delimiter use "--delimiter $\'\\t\'". Default is semicolon.')
+                        help='the delimiter of the csv columns. For tab as delimiter use "--delimiter $\'\\t\'". Default is semicolon.')
     parser.add_argument('-l', '--locale', dest='locale', default='de_DE',
                         help='the locale to use to generate fake data. Default is de_DE')
     parser.add_argument('-o', '--overwrite', dest='overwrite', action='store_true',
@@ -49,7 +50,7 @@ def parseArgs():
     parser.add_argument('-j', '--ignore-missing-file', dest='ignoreMissingFile', action='store_true',
                         help='if set, missing files are ignored')
     parser.add_argument('--header-lines', dest='headerLines', default='0',
-                        help='set to number of header lines to ignore, default = 0')
+                        help='set to number of header lines in csv files to ignore, default = 0')
     return parser.parse_args()
 
 
@@ -77,7 +78,7 @@ def anonymize_rows(rows, columnIndex):
         yield row
 
 
-def anonymize(source, target, columnIndex, headerLines, encoding, delimiter):
+def anonymize_csv(source, target, columnIndex, headerLines, encoding, delimiter):
     """
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
@@ -96,6 +97,21 @@ def anonymize(source, target, columnIndex, headerLines, encoding, delimiter):
             for row in anonymize_rows(reader, columnIndex):
                 writer.writerow(row)
 
+def anonymize_xml(source, target, selector, encoding):
+    """
+    The source argument is a path to an XML file containing data to anonymize,
+    while target is a path to write the anonymized data to.
+    The selector is an xpath string to determine which element/attribute to anonymize.
+    """
+
+    parser = etree.XMLParser(remove_blank_text=True, encoding=encoding) # for pretty print
+    tree = etree.parse(filename, parser=parser)
+    
+    for element in tree.findall(selector):
+        element.text = FAKE_DICT[element.text]
+    result = etree.tostring(tree, pretty_print=True).decode(encoding)
+    with open(target, 'w', encoding=encoding) as outputfile:
+        outputfile.write(result)
 
 if __name__ == '__main__':
     ARGS = parseArgs()
@@ -140,16 +156,25 @@ if __name__ == '__main__':
 
     for infile in ARGS.input:
         parts = infile.split(':')
+        if len(parts) < 2:
+            print('Missing csv column or xpath expression!')
+            sys.exit(2)
         filename = parts[0]
-        column_index = int(parts[1])
+        selector = parts[1]
         # extend wildcards in filename:
         for extendedFile in glob.glob(filename):
             source = extendedFile
             target = source + '_anonymized'
             if os.path.isfile(source):
-                print('anonymizing file %s column %d as type %s to file %s' %
-                    (source, column_index, ARGS.type, target))
-                anonymize(source, target, column_index, int(ARGS.headerLines), ARGS.encoding, delimiter)
+                print('anonymizing file %s selector %s as type %s to file %s' %
+                    (source, selector, ARGS.type, target))
+
+                # depending on selector, read csv or xml:
+                if selector.isnumeric():
+                    anonymize_csv(source, target, int(selector), int(ARGS.headerLines), ARGS.encoding, delimiter)
+                else:
+                    anonymize_xml(source, target, selector, ARGS.encoding)
+
                 # move anonymized file to original file
                 if ARGS.overwrite:
                     print('overwriting original file %s with anonymized file!' % source)
