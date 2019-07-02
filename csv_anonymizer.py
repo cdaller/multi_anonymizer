@@ -36,7 +36,7 @@ import string
 def parseArgs():
     parser = argparse.ArgumentParser(description = 'Anonymize columns of one ore more csv files')
     parser.add_argument('-i', '--input', nargs='+', dest='input',
-                        help='inputfile1:columnindex1 [inputfile2:columnindex2], columindex starts with 0!')
+                        help='inputfile1:columnindex1 for csv or inputfile1:./xpath-selector/@attribute_name for xml, use multiple times to replace in multiple files!')
     parser.add_argument('-t', '--type', dest='type', default='number',
                         help='name, first_name, last_name, email, zip, city, address, number, ... . Default is number')
     parser.add_argument('-e', '--encoding', dest='encoding', default='ISO-8859-15',
@@ -51,6 +51,8 @@ def parseArgs():
                         help='if set, missing files are ignored')
     parser.add_argument('--header-lines', dest='headerLines', default='0',
                         help='set to number of header lines in csv files to ignore, default = 0')
+    parser.add_argument('--namespace', nargs='+', dest='namespace',
+                        help='shortname=http://full-url-of-namespace.com add xml namespaces so they can be used in xpath selector, sepearate with equals')
     return parser.parse_args()
 
 
@@ -97,14 +99,14 @@ def anonymize_csv(source, target, columnIndex, headerLines, encoding, delimiter)
             for row in anonymize_rows(reader, columnIndex):
                 writer.writerow(row)
 
-def anonymize_xml(source, target, selector, encoding):
+def anonymize_xml(source, target, selector, encoding, namespaces):
     """
     The source argument is a path to an XML file containing data to anonymize,
     while target is a path to write the anonymized data to.
     The selector is an xpath string to determine which element/attribute to anonymize.
     """
 
-    parser = etree.XMLParser(remove_blank_text=True, encoding=encoding) # for pretty print
+    parser = etree.XMLParser(remove_blank_text = True, encoding = encoding) # for pretty print
     tree = etree.parse(filename, parser=parser)
 
     selector_parts = selector.split('/@')
@@ -113,7 +115,7 @@ def anonymize_xml(source, target, selector, encoding):
     if len(selector_parts) > 1:
         attribute_name = selector_parts[1] # /person/address/@id -> id
     
-    for element in tree.xpath(element_selector):
+    for element in tree.xpath(element_selector, namespaces = namespaces):
         if attribute_name is None:
             element.text = FAKE_DICT[element.text]
         else:
@@ -165,8 +167,11 @@ if __name__ == '__main__':
 #        delimiter = '\t'
     delimiter = ARGS.delimiter
 
+    if ARGS.input is None:
+        print("Inputfiles are missing!")
+        sys.exit(1)
     for infile in ARGS.input:
-        parts = infile.split(':')
+        parts = infile.split(':', 1)
         if len(parts) < 2:
             print('Missing csv column or xpath expression!')
             sys.exit(2)
@@ -184,7 +189,12 @@ if __name__ == '__main__':
                 if selector.isnumeric():
                     anonymize_csv(source, target, int(selector), int(ARGS.headerLines), ARGS.encoding, delimiter)
                 else:
-                    anonymize_xml(source, target, selector, ARGS.encoding)
+                    namespaces = {}
+                    if ARGS.namespace is not None:
+                        for value in ARGS.namespace:
+                            entry = value.split('=')
+                            namespaces[entry[0]] = entry[1]
+                    anonymize_xml(source, target, selector, ARGS.encoding, namespaces)
 
                 # move anonymized file to original file
                 if ARGS.overwrite:
