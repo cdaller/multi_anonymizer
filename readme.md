@@ -19,7 +19,16 @@ Another tiny tool included in this package is ```csv_filterlines.py``` that can 
 
     csv_filterlines.py --header-lines=1 --encoding UTF-16 input.csv output.csv
     
+## XML
 
+FIXME: add namespace notation
+xpath selector: ./person/address[@id=123]/@id
+
+### Namespaces
+
+Please note that if the xml uses namespaces the anonymization might not work when the xpath expression does not correctly use the correct namespace.
+
+Use the ```--namespace``` argument to add one or more namespaces to be used during xpatht selection. See the example section for - well - an example.
 
 ## Installation
 
@@ -32,13 +41,16 @@ pip3 install glob2
 
 ## Examples
 
-The testfiles directory contains some test csv files:
+### CSV
+
+The testfiles directory contains some test csv files that demonstrate the usage:
 
 Anonymize the person id in all files, first and last name in persons file
 
 ``` sh
+# anonymize columns in mulitple csv files:
 ./csv_anonymizer.py --header-lines 1 \
-  --input testfiles/persons.csv:0 testfiles/adresses.csv:1 
+  --input testfiles/persons.csv:0 testfiles/addresses.csv:1 
 
 ./csv_anonymizer.py --header-lines 1  --overwrite --type first_name \
   --input testfiles/persons.csv_anonymized:1
@@ -46,9 +58,47 @@ Anonymize the person id in all files, first and last name in persons file
 ./csv_anonymizer.py --header-lines 1 --overwrite --type last_name \
   --input testfiles/persons.csv_anonymized:2
 
-# support wildcards in file paths (even recursive directories):
+# support wildcards in file paths (even recursive directories) - need quotes for wildcards to be passed to script:
 ./csv_anonymizer.py --header-lines 1 --overwrite --type last_name \
   --input "testfiles/**/?erson*s.csv_anonymized:2"
+```
+
+### XML
+
+Anonymize element and attribute values in xml files. Use xpath for selection of the element/attribute to be anonymized:
+
+``` sh
+# anonymize element values in xml files:
+./csv_anonymizer.py --type last_name \
+  --input testfiles/addresses.xml:./person/lastname
+
+./csv_anonymizer.py --type firat_name \
+  --input testfiles/addresses.xml_anonymized:./person/firstname
+
+# anonymize attribute value usind /@attributeName syntax:
+./csv_anonymizer.py --overwrite --type number \
+  --input testfiles/addresses.xml_anonymized:./person/address/@id
+```
+
+Use selector (filter) for elements, then choose the attribute to be anonymized:
+
+``` sh
+# do advanced xpath filtering (need single quotes for braces):
+# filter on id
+./csv_anonymizer.py --type number \
+  --input 'testfiles/addresses.xml:./person/address[@id="123"]/@id'
+
+# filter on name, then choose another element's attribute to be anonymized:
+./csv_anonymizer.py --type number \
+  --input 'testfiles/addresses.xml:.//person/lastname[text()="Riegler"]/../address/@id'  
+```
+
+Using namespaces:
+
+``` sh
+./csv_anonymizer.py --type last_name \
+  --namespace adr=https://github.com/cdaller/csv_anonymizer/addressbook \
+  --input testfiles/addresses_ns.xml:./adr:person/lastname
 ```
 
 ## Thanks

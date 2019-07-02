@@ -36,7 +36,7 @@ import string
 def parseArgs():
     parser = argparse.ArgumentParser(description = 'Anonymize columns of one ore more csv files')
     parser.add_argument('-i', '--input', nargs='+', dest='input',
-                        help='inputfile1:columnindex1 for csv or inputfile1:./xpath-selector/@attribute_name for xml, use multiple times to replace in multiple files!')
+                        help='inputfile1:columnindex1 [inputfile2:columnindex2] for csv or inputfile1:./xpath-selector/@attribute_name for xml, use multiple arguments to replace in multiple files!')
     parser.add_argument('-t', '--type', dest='type', default='number',
                         help='name, first_name, last_name, email, zip, city, address, number, ... . Default is number')
     parser.add_argument('-e', '--encoding', dest='encoding', default='ISO-8859-15',
