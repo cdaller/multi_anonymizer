@@ -106,9 +106,20 @@ def anonymize_xml(source, target, selector, encoding):
 
     parser = etree.XMLParser(remove_blank_text=True, encoding=encoding) # for pretty print
     tree = etree.parse(filename, parser=parser)
+
+    selector_parts = selector.split('/@')
+    element_selector = selector_parts[0]
+    attribute_name = None
+    if len(selector_parts) > 1:
+        attribute_name = selector_parts[1] # /person/address/@id -> id
     
-    for element in tree.findall(selector):
-        element.text = FAKE_DICT[element.text]
+    for element in tree.xpath(element_selector):
+        if attribute_name is None:
+            element.text = FAKE_DICT[element.text]
+        else:
+            old_value = element.attrib[attribute_name]
+            new_value = str(FAKE_DICT[old_value]) # convert numbers to string
+            element.attrib[attribute_name] = new_value 
     result = etree.tostring(tree, pretty_print=True).decode(encoding)
     with open(target, 'w', encoding=encoding) as outputfile:
         outputfile.write(result)
