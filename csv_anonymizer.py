@@ -117,7 +117,7 @@ def anonymize_xml(source, target, selector, encoding, namespaces):
     
     for element in tree.xpath(element_selector, namespaces = namespaces):
         if attribute_name is None:
-            element.text = FAKE_DICT[element.text]
+            element.text = str(FAKE_DICT[element.text])
         else:
             old_value = element.attrib[attribute_name]
             new_value = str(FAKE_DICT[old_value]) # convert numbers to string
@@ -142,6 +142,8 @@ if __name__ == '__main__':
         FAKE_DICT = defaultdict(getRandomInt())
     if ARGS.type == 'email':
         FAKE_DICT = defaultdict(FAKER.email)
+    if ARGS.type == 'phone_number':
+        FAKE_DICT = defaultdict(FAKER.phone_number)
     if ARGS.type == 'zip':
         FAKE_DICT = defaultdict(FAKER.postcode)
     if ARGS.type == 'postcode':
@@ -178,7 +180,11 @@ if __name__ == '__main__':
         filename = parts[0]
         selector = parts[1]
         # extend wildcards in filename:
-        for extendedFile in glob.glob(filename):
+        files_to_read = glob.glob(filename)
+        if len(files_to_read) == 0 and not ARGS.ignoreMissingFile:
+            print('no files found: %s' % filename)
+            sys.exit(1)
+        for extendedFile in files_to_read:
             source = extendedFile
             target = source + '_anonymized'
             if os.path.isfile(source):
