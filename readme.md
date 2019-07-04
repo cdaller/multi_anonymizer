@@ -78,6 +78,9 @@ Anonymize element and attribute values in xml files. Use xpath for selection of 
 # anonymize attribute value usind /@attributeName syntax:
 ./csv_anonymizer.py --overwrite --type number \
   --input testfiles/addresses.xml_anonymized:./person/address/@id
+
+./csv_anonymizer.py --overwrite --type zip \
+  --input testfiles/addresses.xml_anonymized:./person/address/zip
 ```
 
 Use selector (filter) for elements, then choose the attribute to be anonymized:
@@ -93,13 +96,15 @@ Use selector (filter) for elements, then choose the attribute to be anonymized:
   --input 'testfiles/addresses.xml:.//person/lastname[text()="Riegler"]/../address/@id'  
 ```
 
-Using namespaces:
+#### Namespaces
 
 ``` sh
 ./csv_anonymizer.py --type last_name \
   --namespace adr=https://github.com/cdaller/csv_anonymizer/addressbook \
   --input testfiles/addresses_ns.xml:./adr:person/lastname
 ```
+
+As there is no such thing as default namespaces in xpath, just use any prefix for the namespace mapping and for the xpath expression. 
 
 ## Thanks
 
