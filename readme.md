@@ -66,11 +66,22 @@ Use the ```--namespace``` argument to add one or more namespaces to be used duri
 
 ## Installation
 
+Script runs with python 3 (3.8.x and above).
+
 Install faker python library and other dependencies:
 
 ```
-pip3 install Faker
+pip3 install faker
 pip3 install glob2
+pip3 install lxml
+```
+
+Might need to do with sudo:
+
+```
+sudo -H pip3 install faker
+sudo -H pip3 install glob2
+sudo -H pip3 install lxml
 ```
 
 ## Examples
