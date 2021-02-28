@@ -164,6 +164,8 @@ if __name__ == '__main__':
         FAKE_DICT = defaultdict(FAKER.text)
     if ARGS.type == 'date':
         FAKE_DICT = defaultdict(FAKER.date)
+    if ARGS.type == 'uuid4':
+        FAKE_DICT = defaultdict(FAKER.uuid4)
     # special handling for tab delimiter to allow easier passing as command line:
     if ARGS.delimiter == "\t":
         print('Detected tab as delimiter')
