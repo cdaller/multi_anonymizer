@@ -75,7 +75,7 @@ def anonymize_rows(rows, columnIndex):
     for row in rows:
         # Replace the column with faked fields if filled (trim whitespace first):
         if len(row[columnIndex].strip()) > 0:
-            row[columnIndex] = FAKE_DICT[row[columnIndex].strip()]
+            row[columnIndex] = FAKE_DICT[row[columnIndex].strip().replace('\n', '')]
         # Yield the row back to the caller
         yield row
 
