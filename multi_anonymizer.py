@@ -12,37 +12,32 @@ Author: Christof Dallermassl
 License: MIT
 """
 
-import sys
-import shutil
-import os.path
+import argparse
 import csv
-import glob2 as glob
-import faker
-import re
-from faker.providers import BaseProvider
-from faker.providers import date_time
+import os.path
+import random
+import shutil
+import sys
+from collections import defaultdict
 
+import glob2 as glob
+from faker import Factory
 from lxml import etree
 
-from faker import Faker
-from faker import Factory
-from collections import defaultdict
-import argparse
-import random
 
-import string
-
-
-def parseArgs():
-    parser = argparse.ArgumentParser(description = 'Anonymize columns of one ore more csv files')
+def parse_args():
+    parser = argparse.ArgumentParser(description='Anonymize columns of one ore more csv files')
     parser.add_argument('-i', '--input', nargs='+', dest='input',
-                        help='inputfile1:columnindex1 [inputfile2:columnindex2] for csv or inputfile1:./xpath-selector/@attribute_name for xml, use multiple arguments to replace in multiple files!')
+                        help='inputfile1:columnindex1 [inputfile2:columnindex2] for csv or '
+                             'inputfile1:./xpath-selector/@attribute_name for xml, use multiple arguments to replace '
+                             'in multiple files!')
     parser.add_argument('-t', '--type', dest='type', default='number',
                         help='name, first_name, last_name, email, zip, city, address, number, ... . Default is number')
     parser.add_argument('-e', '--encoding', dest='encoding', default='ISO-8859-15',
                         help='the encoding of the file to read/write. Default is ISO-8859-15')
     parser.add_argument('-d', '--delimiter', dest='delimiter', default=';',
-                        help='the delimiter of the csv columns. For tab as delimiter use "--delimiter $\'\\t\'". Default is semicolon.')
+                        help='the delimiter of the csv columns. For tab as delimiter use "--delimiter $\'\\t\'". '
+                             'Default is semicolon.')
     parser.add_argument('-l', '--locale', dest='locale', default='de_DE',
                         help='the locale to use to generate fake data. Default is de_DE')
     parser.add_argument('-o', '--overwrite', dest='overwrite', action='store_true',
@@ -52,19 +47,16 @@ def parseArgs():
     parser.add_argument('--header-lines', dest='headerLines', default='0',
                         help='set to number of header lines in csv files to ignore, default = 0')
     parser.add_argument('--namespace', nargs='+', dest='namespace',
-                        help='shortname=http://full-url-of-namespace.com add xml namespaces so they can be used in xpath selector, sepearate with equals')
-    return parser.parse_args()
+                        help='shortname=http://full-url-of-namespace.com add xml namespaces so they can be used in '
+                             'xpath selector, sepearate with equals')
+    return parser
 
-
-if len(sys.argv) < 1:
-    print('Usage: anon.py <source> [<source> ...]')
-    sys.exit(1)
 
 def getRandomInt(start=0, end=1000000):
     return lambda: random.randint(start, end)
 
 
-def anonymize_rows(rows, columnIndex):
+def anonymize_rows(rows, column_index):
     """
     Rows is an iterable of dictionaries that contain name and
     email fields that need to be anonymized.
@@ -74,63 +66,72 @@ def anonymize_rows(rows, columnIndex):
     # Iterate over the rows and yield anonymized rows.
     for row in rows:
         # Replace the column with faked fields if filled (trim whitespace first):
-        if len(row[columnIndex].strip()) > 0:
-            row[columnIndex] = FAKE_DICT[row[columnIndex].strip().replace('\n', '')]
+
+        if len(row) > column_index:
+            if len(row[column_index].strip()) > 0:
+                row[column_index] = FAKE_DICT[row[column_index].strip().replace('\n', '')]
         # Yield the row back to the caller
         yield row
 
 
-def anonymize_csv(source, target, columnIndex, headerLines, encoding, delimiter):
+def anonymize_csv(source_file_name, target_file_name, column_index, header_lines, encoding, delimiter):
     """
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
     """
-    with open(source, 'r', encoding=encoding, newline=None) as inputfile:
-        with open(target, 'w', encoding=encoding) as outputfile:
+    with open(source_file_name, 'r', encoding=encoding, newline=None) as inputfile:
+        with open(target_file_name, 'w', encoding=encoding) as outputfile:
             # Use the DictReader to easily extract fields
             reader = csv.reader(inputfile, delimiter=delimiter)
             writer = csv.writer(outputfile, delimiter=delimiter, lineterminator='\n')
 
             # Read and anonymize data, writing to target file.
-            skipLines = headerLines
-            while (skipLines > 0):
+            skip_lines = header_lines
+            while skip_lines > 0:
                 writer.writerow(next(reader))
-                skipLines = skipLines - 1
-            for row in anonymize_rows(reader, columnIndex):
+                skip_lines = skip_lines - 1
+            for row in anonymize_rows(reader, column_index):
                 writer.writerow(row)
 
-def anonymize_xml(source, target, selector, encoding, namespaces):
+
+def anonymize_xml(source_file_name, target_file_name, selector, encoding, namespaces):
     """
     The source argument is a path to an XML file containing data to anonymize,
     while target is a path to write the anonymized data to.
     The selector is an xpath string to determine which element/attribute to anonymize.
     """
 
-    parser = etree.XMLParser(remove_blank_text = True, encoding = encoding) # for pretty print
+    parser = etree.XMLParser(remove_blank_text=True, encoding=encoding)  # for pretty print
     tree = etree.parse(filename, parser=parser)
 
     selector_parts = selector.split('/@')
     element_selector = selector_parts[0]
     attribute_name = None
     if len(selector_parts) > 1:
-        attribute_name = selector_parts[1] # /person/address/@id -> id
-    
-    for element in tree.xpath(element_selector, namespaces = namespaces):
+        attribute_name = selector_parts[1]  # /person/address/@id -> id
+
+    for element in tree.xpath(element_selector, namespaces=namespaces):
         if attribute_name is None:
             element.text = str(FAKE_DICT[element.text])
         else:
             old_value = element.attrib[attribute_name]
-            new_value = str(FAKE_DICT[old_value]) # convert numbers to string
-            element.attrib[attribute_name] = new_value 
+            new_value = str(FAKE_DICT[old_value])  # convert numbers to string
+            element.attrib[attribute_name] = new_value
     result = etree.tostring(tree, pretty_print=True).decode(encoding)
-    with open(target, 'w', encoding=encoding) as outputfile:
+    with open(target_file_name, 'w', encoding=encoding) as outputfile:
         outputfile.write(result)
 
+
 if __name__ == '__main__':
-    ARGS = parseArgs()
+    parser = parse_args()
+    ARGS = parser.parse_args()
+
+    if ARGS.input is None:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
 
     FAKER = Factory.create(ARGS.locale)
-    
+
     # Create mappings of names & emails to faked names & emails.
     if ARGS.type == 'name':
         FAKE_DICT = defaultdict(FAKER.name)
@@ -169,12 +170,9 @@ if __name__ == '__main__':
     # special handling for tab delimiter to allow easier passing as command line:
     if ARGS.delimiter == "\t":
         print('Detected tab as delimiter')
-#        delimiter = '\t'
+    #        delimiter = '\t'
     delimiter = ARGS.delimiter
 
-    if ARGS.input is None:
-        print("Inputfiles are missing!")
-        sys.exit(1)
     for infile in ARGS.input:
         parts = infile.split(':', 1)
         if len(parts) < 2:
@@ -192,7 +190,7 @@ if __name__ == '__main__':
             target = source + '_anonymized'
             if os.path.isfile(source):
                 print('anonymizing file %s selector %s as type %s to file %s' %
-                    (source, selector, ARGS.type, target))
+                      (source, selector, ARGS.type, target))
 
                 # depending on selector, read csv or xml:
                 if selector.isnumeric():
@@ -215,4 +213,3 @@ if __name__ == '__main__':
                 else:
                     print('file %s does not exist!' % source)
                     sys.exit(1)
-    
