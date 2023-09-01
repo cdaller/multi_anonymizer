@@ -16,7 +16,8 @@ The anonymization is done by the joe2k/faker library - so in principle all anony
 * street_address
 * city
 * iban
-* number
+* number[:min[:max]]
+  * min/max is optional (e.g. number:12:99 or number:100)
 * text
 * sentence
 * text
@@ -172,6 +173,8 @@ testfiles/create_sqlite.py testfiles/my_database.db
 # anonymize name columnt in table people
 ./multi_anonymizer.py --type name \
   --input sqlite:///testfiles/my_database.db:people/name
+./multi_anonymizer.py --type number:18:48 \
+  --input sqlite:///testfiles/my_database.db:people/age
 
 ```
 

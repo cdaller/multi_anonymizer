@@ -167,15 +167,16 @@ def anonymize_db(connection_string, selector, encoding) -> int:
         for row in result:
             original_value = row[0]
             # FIXME: handle numeric values
-            anonymized_value = str(FAKE_DICT[original_value.encode()])
-            
-            update_stmt = (
-                update(table)
-                .where(table.c[column_name] == bindparam('orig_value'))
-                .values({column_name: bindparam('new_value')})
-            )
-            connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
-            counter += 1
+            if original_value != None:
+                anonymized_value = str(FAKE_DICT[original_value])
+                
+                update_stmt = (
+                    update(table)
+                    .where(table.c[column_name] == bindparam('orig_value'))
+                    .values({column_name: bindparam('new_value')})
+                )
+                connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
+                counter += 1
 
         connection.commit()
     
@@ -198,8 +199,11 @@ if __name__ == '__main__':
         FAKE_DICT = defaultdict(FAKER.first_name)
     if ARGS.type == 'last_name':
         FAKE_DICT = defaultdict(FAKER.last_name)
-    if ARGS.type == 'number':
-        FAKE_DICT = defaultdict(getRandomInt())
+    if ARGS.type.startswith('number'):
+        type_arg_split = ARGS.type.split(':')
+        start_num = int(type_arg_split[1]) if len(type_arg_split) > 1 else 0
+        end_num = int(type_arg_split[2]) if len(type_arg_split) > 2 else 1000000
+        FAKE_DICT = defaultdict(getRandomInt(start_num, end_num))
     if ARGS.type == 'email':
         FAKE_DICT = defaultdict(FAKER.email)
     if ARGS.type == 'phone_number':

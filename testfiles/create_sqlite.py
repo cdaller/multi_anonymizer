@@ -35,7 +35,13 @@ for _ in range(10):  # Adjust the number of entries you want to add
     
     insert_query = "INSERT INTO people (name, age) VALUES (?, ?)"
     cursor.execute(insert_query, (name, age))
-    conn.commit()
+
+# insert a null values as a valid test case
+insert_query = "INSERT INTO people (name, age) VALUES (?, ?)"
+cursor.execute(insert_query, (None, 21))
+insert_query = "INSERT INTO people (name, age) VALUES (?, ?)"
+cursor.execute(insert_query, ('No Age', None))
+conn.commit()
 
 # Close the database connection
 conn.close()
