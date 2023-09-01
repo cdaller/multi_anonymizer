@@ -92,7 +92,7 @@ The testfiles directory contains some test csv files that demonstrate the usage:
 
 Anonymize the person id in all files, first and last name in persons file
 
-``` sh
+```sh
 # anonymize columns in mulitple csv files:
 ./multi_anonymizer.py --header-lines 1 \
   --input testfiles/persons.csv:0 testfiles/addresses.csv:1 
@@ -110,14 +110,20 @@ Anonymize the person id in all files, first and last name in persons file
 
 ### XML
 
+If xml anonymization is needed, the pyhton lxml package needs to be installed:
+
+```sh
+pip install lxml
+```
+
 Anonymize element and attribute values in xml files. Use xpath for selection of the element/attribute to be anonymized:
 
-``` sh
+```sh
 # anonymize element values in xml files:
 ./multi_anonymizer.py --type last_name \
   --input testfiles/addresses.xml:./person/lastname
 
-./multi_anonymizer.py --type firat_name \
+./multi_anonymizer.py --type first_name \
   --input testfiles/addresses.xml_anonymized:./person/firstname
 
 # anonymize attribute value usind /@attributeName syntax:
@@ -130,7 +136,7 @@ Anonymize element and attribute values in xml files. Use xpath for selection of 
 
 Use selector (filter) for elements, then choose the attribute to be anonymized:
 
-``` sh
+```sh
 # do advanced xpath filtering (need single quotes for braces):
 # filter on id
 ./multi_anonymizer.py --type number \
@@ -143,10 +149,30 @@ Use selector (filter) for elements, then choose the attribute to be anonymized:
 
 #### Namespaces
 
-``` sh
+```sh
 ./multi_anonymizer.py --type last_name \
   --namespace adr=https://github.com/cdaller/multi_anonymizer/addressbook \
   --input testfiles/addresses_ns.xml:./adr:person/lastname
+```
+
+### Database
+
+If database anonymization is needed, the python SQLAlchemy package needs to be installed:
+
+```sh
+pip install SQLAlchemy
+```
+
+Please note that for database anonymization, the anonymized values always replace the original values!
+
+```sh
+# create test database:
+testfiles/create_sqlite.py testfiles/my_database.db
+
+# anonymize name columnt in table people
+./multi_anonymizer.py --type name \
+  --input sqlite:///testfiles/my_database.db:people/name
+
 ```
 
 As there is no such thing as default namespaces in xpath, just use any prefix for the namespace mapping and for the xpath expression. 

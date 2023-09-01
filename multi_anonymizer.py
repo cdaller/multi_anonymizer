@@ -19,19 +19,35 @@ import os.path
 import random
 import shutil
 import sys
+import re
 from collections import defaultdict
+import time
 
 import glob2 as glob
 from faker import Factory
-from lxml import etree
+
+try:
+    from lxml import etree
+    xml_available = True
+except ImportError:
+    xml_available = False
+
+try:
+    from sqlalchemy import create_engine, select, update, MetaData, Table, bindparam
+    sql_available = True
+except ImportError:
+    sql_available = False
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Anonymize columns of one ore more csv files')
+    parser = argparse.ArgumentParser(description='Anonymize columns of one ore more csv files', formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-i', '--input', nargs='+', dest='input',
-                        help='inputfile1:columnindex1 [inputfile2:columnindex2] for csv or '
-                             'inputfile1:./xpath-selector/@attribute_name for xml, use multiple arguments to replace '
-                             'in multiple files!')
+                        help="inputfile1:columnindex1 [inputfile2:columnindex2] for csv or \n"
+                             "inputfile1:./xpath-selector/@attribute_name for xml\n"
+                             "sqlite://[username:password@]server/database:tablename/columnname for database content\n"
+                             "use multiple arguments to anonymize a value in multiple files!\n"
+                             "Mixing of different types (csv, xml, ...) also works!\n"
+                             "Wildcards like '*' or '?' in filenames will also work!")
     parser.add_argument('-t', '--type', dest='type', default='number',
                         help='name, first_name, last_name, email, zip, city, address, number, ... . Default is number')
     parser.add_argument('-e', '--encoding', dest='encoding', default='ISO-8859-15',
@@ -75,11 +91,12 @@ def anonymize_rows(rows, column_index):
         yield row
 
 
-def anonymize_csv(source_file_name, target_file_name, column_index, header_lines, encoding, delimiter):
+def anonymize_csv(source_file_name, target_file_name, column_index, header_lines, encoding, delimiter) -> int:
     """
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
     """
+    counter = 0
     with open(source_file_name, 'r', encoding=encoding, newline=None) as inputfile:
         with open(target_file_name, 'w', encoding=encoding) as outputfile:
             # Use the DictReader to easily extract fields
@@ -93,17 +110,23 @@ def anonymize_csv(source_file_name, target_file_name, column_index, header_lines
                 skip_lines = skip_lines - 1
             for row in anonymize_rows(reader, column_index):
                 writer.writerow(row)
+                counter += 1
+    return counter
 
 
-def anonymize_xml(source_file_name, target_file_name, selector, encoding, namespaces):
+def anonymize_xml(source_file_name, target_file_name, selector, encoding, namespaces) -> int:
     """
     The source argument is a path to an XML file containing data to anonymize,
     while target is a path to write the anonymized data to.
     The selector is an xpath string to determine which element/attribute to anonymize.
     """
 
+    if not xml_available:
+        print('for xml processing, the library "lxml" is needed - please install with pip!')
+        sys.exit(2)
+
     parser = etree.XMLParser(remove_blank_text=True, encoding=encoding)  # for pretty print
-    tree = etree.parse(filename, parser=parser)
+    tree = etree.parse(input_name, parser=parser)
 
     selector_parts = selector.split('/@')
     element_selector = selector_parts[0]
@@ -111,6 +134,7 @@ def anonymize_xml(source_file_name, target_file_name, selector, encoding, namesp
     if len(selector_parts) > 1:
         attribute_name = selector_parts[1]  # /person/address/@id -> id
 
+    counter = 0
     for element in tree.xpath(element_selector, namespaces=namespaces):
         if attribute_name is None:
             element.text = str(FAKE_DICT[element.text])
@@ -118,10 +142,44 @@ def anonymize_xml(source_file_name, target_file_name, selector, encoding, namesp
             old_value = element.attrib[attribute_name]
             new_value = str(FAKE_DICT[old_value])  # convert numbers to string
             element.attrib[attribute_name] = new_value
+        counter += 1
     result = etree.tostring(tree, pretty_print=True).decode(encoding)
     with open(target_file_name, 'w', encoding=encoding) as outputfile:
         outputfile.write(result)
+    return counter
 
+def anonymize_db(connection_string, selector, encoding) -> int:
+
+    [table_name, column_name] = selector.split('/')
+
+    engine = create_engine(connection_string, echo = False)
+    metadata = MetaData()
+    table = Table(table_name, metadata, autoload_with = engine)
+
+    counter = 0
+
+    # Connect to the database
+    with engine.connect() as connection:
+        select_stmt = select(table.c[column_name])
+        result = connection.execute(select_stmt)
+
+        # Iterate over the rows and anonymize the value
+        for row in result:
+            original_value = row[0]
+            # FIXME: handle numeric values
+            anonymized_value = str(FAKE_DICT[original_value.encode()])
+            
+            update_stmt = (
+                update(table)
+                .where(table.c[column_name] == bindparam('orig_value'))
+                .values({column_name: bindparam('new_value')})
+            )
+            connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
+            counter += 1
+
+        connection.commit()
+    
+    return counter
 
 if __name__ == '__main__':
     parser = parse_args()
@@ -174,40 +232,61 @@ if __name__ == '__main__':
     #        delimiter = '\t'
     delimiter = ARGS.delimiter
 
-    for infile in ARGS.input:
-        parts = infile.split(':', 1)
+    for input_source in ARGS.input:
+        parts = input_source.rsplit(':', 1)
         if len(parts) < 2:
-            print('Missing csv column or xpath expression!')
+            print('Missing csv column, xpath expression or table/column name!')
             sys.exit(2)
-        filename = parts[0]
+        input_name = parts[0]
         selector = parts[1]
-        # extend wildcards in filename:
-        files_to_read = glob.glob(filename)
-        if len(files_to_read) == 0 and not ARGS.ignoreMissingFile:
-            print('no files found: %s' % filename)
+
+        source_is_database = False
+        if '://' in input_name:
+            source_is_database = True
+
+        if source_is_database:
+            # no wildcards in database urls!
+            inputs_to_read = [input_name]
+        else:
+            # extend wildcards in filename:
+            inputs_to_read = glob.glob(input_name)
+        if len(inputs_to_read) == 0 and not ARGS.ignoreMissingFile:
+            print('no input sources found: %s' % input_name)
             sys.exit(1)
-        for extendedFile in files_to_read:
-            source = extendedFile
-            target = source + '_anonymized'
-            if os.path.isfile(source):
+
+        total_counter = 0
+        start_time = time.process_time()
+
+        for input in inputs_to_read:
+            source = input
+            target = source + '_anonymized' # fixme: allow to set the targetfilename following a pattern
+            if os.path.isfile(source) or source_is_database:
                 print('anonymizing file %s selector %s as type %s to file %s' %
                       (source, selector, ARGS.type, target))
 
+                counter = 0
                 # depending on selector, read csv or xml:
                 if selector.isnumeric():
-                    anonymize_csv(source, target, int(selector), int(ARGS.headerLines), ARGS.encoding, delimiter)
+                    counter = anonymize_csv(source, target, int(selector), int(ARGS.headerLines), ARGS.encoding, delimiter)
                 else:
-                    namespaces = {}
-                    if ARGS.namespace is not None:
-                        for value in ARGS.namespace:
-                            entry = value.split('=')
-                            namespaces[entry[0]] = entry[1]
-                    anonymize_xml(source, target, selector, ARGS.encoding, namespaces)
+                    if source_is_database:
+                        counter = anonymize_db(source, selector, ARGS.encoding)
+                    else:
+                        namespaces = {}
+                        if ARGS.namespace is not None:
+                            for value in ARGS.namespace:
+                                entry = value.split('=')
+                                namespaces[entry[0]] = entry[1]
+                        counter = anonymize_xml(source, target, selector, ARGS.encoding, namespaces)
 
                 # move anonymized file to original file
                 if ARGS.overwrite:
                     print('overwriting original file %s with anonymized file!' % source)
                     shutil.move(src=target, dst=source)
+
+                total_counter += counter
+                end_time = time.process_time()
+                print(f'Anonymized {total_counter} values in {(end_time - start_time):.{2}}s')
             else:
                 if ARGS.ignoreMissingFile:
                     print('ignoring missing file %s' % source)
