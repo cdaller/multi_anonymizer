@@ -157,6 +157,8 @@ Use selector (filter) for elements, then choose the attribute to be anonymized:
   --input testfiles/addresses_ns.xml:./adr:person/lastname
 ```
 
+As there is no such thing as default namespaces in xpath, just use any prefix for the namespace mapping and for the xpath expression. 
+
 ### Database
 
 If database anonymization is needed, the python SQLAlchemy package needs to be installed:
@@ -181,8 +183,6 @@ testfiles/create_sqlite.py testfiles/my_database.db
   --input sqlite:///testfiles/my_database.db:people/age
 
 ```
-
-As there is no such thing as default namespaces in xpath, just use any prefix for the namespace mapping and for the xpath expression. 
 
 ## Thanks
 
