@@ -69,7 +69,7 @@ def parse_args():
     return parser
 
 
-def getRandomInt(start=0, end=1000000):
+def getRandomInt(start: int = 0, end: int = 1000000):
     return lambda: random.randint(start, end)
 
 
@@ -176,6 +176,7 @@ def anonymize_db(connection_string, selector, encoding) -> int:
                     .values({column_name: bindparam('new_value')})
                 )
                 connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
+                print(f'replacing {original_value} with {anonymized_value}')
                 counter += 1
 
         connection.commit()
@@ -230,6 +231,8 @@ if __name__ == '__main__':
         FAKE_DICT = defaultdict(FAKER.date)
     if ARGS.type == 'uuid4':
         FAKE_DICT = defaultdict(FAKER.uuid4)
+    if ARGS.type == 'company':
+        FAKE_DICT = defaultdict(FAKER.company)
     # special handling for tab delimiter to allow easier passing as command line:
     if ARGS.delimiter == "\t":
         print('Detected tab as delimiter')
@@ -263,18 +266,22 @@ if __name__ == '__main__':
 
         for input in inputs_to_read:
             source = input
-            target = source + '_anonymized' # fixme: allow to set the targetfilename following a pattern
-            if os.path.isfile(source) or source_is_database:
-                print('anonymizing file %s selector %s as type %s to file %s' %
-                      (source, selector, ARGS.type, target))
+            counter = 0
+            # database handling:
+            if source_is_database:
+                print('anonymizing file %s selector %s as type %s' % (source, selector, ARGS.type))
+                counter = anonymize_db(source, selector, ARGS.encoding)
 
-                counter = 0
-                # depending on selector, read csv or xml:
-                if selector.isnumeric():
-                    counter = anonymize_csv(source, target, int(selector), int(ARGS.headerLines), ARGS.encoding, delimiter)
-                else:
-                    if source_is_database:
-                        counter = anonymize_db(source, selector, ARGS.encoding)
+            # file handling:
+            else:
+                target = source + '_anonymized' # fixme: allow to set the targetfilename following a pattern
+                if os.path.isfile(source) or source_is_database:
+                    print('anonymizing file %s selector %s as type %s to file %s' %
+                        (source, selector, ARGS.type, target))
+
+                    # depending on selector, read csv or xml:
+                    if selector.isnumeric():
+                        counter = anonymize_csv(source, target, int(selector), int(ARGS.headerLines), ARGS.encoding, delimiter)
                     else:
                         namespaces = {}
                         if ARGS.namespace is not None:
@@ -283,17 +290,18 @@ if __name__ == '__main__':
                                 namespaces[entry[0]] = entry[1]
                         counter = anonymize_xml(source, target, selector, ARGS.encoding, namespaces)
 
-                # move anonymized file to original file
-                if ARGS.overwrite:
-                    print('overwriting original file %s with anonymized file!' % source)
-                    shutil.move(src=target, dst=source)
+                    # move anonymized file to original file
+                    if ARGS.overwrite:
+                        print('overwriting original file %s with anonymized file!' % source)
+                        shutil.move(src=target, dst=source)
 
-                total_counter += counter
-                end_time = time.process_time()
-                print(f'Anonymized {total_counter} values in {(end_time - start_time):.{2}}s')
-            else:
-                if ARGS.ignoreMissingFile:
-                    print('ignoring missing file %s' % source)
                 else:
-                    print('file %s does not exist!' % source)
-                    sys.exit(1)
+                    if ARGS.ignoreMissingFile:
+                        print('ignoring missing file %s' % source)
+                    else:
+                        print('file %s does not exist!' % source)
+                        sys.exit(1)
+
+            total_counter += counter
+            end_time = time.process_time()
+            print(f'Anonymized {total_counter} values in {(end_time - start_time):.{2}}s')

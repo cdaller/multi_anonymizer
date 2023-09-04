@@ -21,6 +21,7 @@ The anonymization is done by the joe2k/faker library - so in principle all anony
 * text
 * sentence
 * text
+* company
 
 More can be easily added.
 
@@ -163,6 +164,9 @@ If database anonymization is needed, the python SQLAlchemy package needs to be i
 ```sh
 pip install SQLAlchemy
 ```
+
+Depending on the database you want to use, you might need further installations!
+SQLAlchemy is used internally, so please see https://docs.sqlalchemy.org/en/20/dialects/index.html for details, how to connect to different database dialects.
 
 Please note that for database anonymization, the anonymized values always replace the original values!
 
