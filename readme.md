@@ -115,8 +115,14 @@ Anonymize the person id in all files, first and last name in persons file
 ./multi_anonymizer.py --header-lines 1 --overwrite --type last_name \
   --input testfiles/persons.csv_anonymized:2
 
+# or all at once using the new syntax:
+./multi_anonymizer.py --header-lines 1 \
+  --input "testfiles/persons.csv:(type=number,column=0)" \
+          "testfiles/addresses.csv:(type=number,column=1)" \
+          "testfiles/persons.csv:(input_type=csv,type=first_name,column=1)" \
+          "testfiles/persons.csv:(input_type=csv,type=last_name,column=2)"
+
 # new syntax
-# if same file is modified, '--overwrite' is needed. 
 # As the filename does not end in 'csv', 'input_type' is also needed!
 ./multi_anonymizer.py --header-lines 1 --overwrite \
   --input "testfiles/persons.csv_anonymized:(input_type=csv,type=first_name,column=1)" \
@@ -228,13 +234,24 @@ The special variables ```__value__``` and ```___original_value___``` can also be
 
 Apart from that, all column names that were used **before** can be used. The replacement works in the order of the given input arguments. So you cannot access the value of a column of an input selector that is defined after the current input selector!
 
+For csv file column indices, use ```col_<index>``` (like ```col_1```, etc.) as a reference in the templates. Jinja2 does not recognize numbers as variables names.
+
+Templates that use other values will also not work when using xpath expressions on xml files, as there is no "row-context" possible.
+
 ```bash
-./multi_anonymizer.py --header-lines 1  --overwrite \
+./multi_anonymizer.py --header-lines 1 \
+  --input \
+    "testfiles/persons.csv:(type=first_name,column=1)" \
+    "testfiles/persons.csv:(type=last_name,column=2)" \
+    "testfiles/persons.csv:(type=name,column=3,template={{col_1|unidecode|lower}}.{{col_2|unidecode|lower}}@example.com)"
+
+./multi_anonymizer.py \
   --input \
     "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=people,column=last_name)" \
     "sqlite:///testfiles/my_database.db:(input_type=db,type=first_name,table=people,column=first_name,template={{__value__|lower}})" \
     "sqlite:///testfiles/my_database.db:(input_type=db,type=email,table=people,column=email,template={{first_name|unidecode|lower}}.{{last_name|unidecode|lower}}@example.com)" \
     "sqlite:///testfiles/my_database.db:(input_type=db,type=number,min=18,max=60,table=people,column=age)"
+
 ```
 
 ## Thanks

@@ -158,9 +158,19 @@ def get_fake_dict(selector: Selector):
     return fake_dict
     
 def anonymize_value(selector: Selector, original_value, context: Dict[str, str] = {}):
-    jinja_template = template_env.from_string(selector.template)
     anonymized_value = get_fake_dict(selector)[original_value]
+    
+    jinja_template = template_env.from_string(selector.template)
     context['__value__'] = anonymized_value
+    context['__original_value__'] = original_value
+    if selector.column is not None:
+        if selector.column.isnumeric():
+            context["col_" + selector.column] = anonymized_value
+        else:
+            context[selector.column] = anonymized_value
+    if selector.xpath is not None:
+        context[selector.xpath] = anonymized_value    
+
     return jinja_template.render(context)
 
 
@@ -176,6 +186,7 @@ def anonymize_rows(rows, selectors: List[Selector]):
 
     # Iterate over the rows and yield anonymized rows.
     for row in rows:
+        context = {}
         for selector in selectors:
 
             if selector.column is None:
@@ -187,7 +198,7 @@ def anonymize_rows(rows, selectors: List[Selector]):
             if column_index < len(row):
                 if len(row[column_index].strip()) > 0:
                     original_value = row[column_index].strip().replace('\n', '')
-                    anonymized_value = anonymize_value(selector, original_value)
+                    anonymized_value = anonymize_value(selector, original_value, context)
                     row[column_index] = anonymized_value
         # Yield the row back to the caller
         yield row
@@ -232,6 +243,7 @@ def anonymize_xml(source_file_name, target_file_name, selectors: List[Selector],
     tree = etree.parse(input_name, parser=parser)
 
     counter = 0
+    context = {}
     for selector in selectors:
 
         if selector.xpath is None:
@@ -246,11 +258,11 @@ def anonymize_xml(source_file_name, target_file_name, selectors: List[Selector],
 
         for element in tree.xpath(element_selector, namespaces=namespaces):
             if attribute_name is None:
-                element.text = str(anonymize_value(selector, element.text))
+                element.text = str(anonymize_value(selector, element.text, context))
             else:
-                old_value = element.attrib[attribute_name]
-                new_value = str(anonymize_value(selector, old_value))  # convert numbers to string
-                element.attrib[attribute_name] = new_value
+                original_value = element.attrib[attribute_name]
+                anonymized_value = str(anonymize_value(selector, original_value, context))  # convert numbers to string
+                element.attrib[attribute_name] = anonymized_value
             counter += 1
 
     result = etree.tostring(tree, pretty_print=True).decode(encoding)
@@ -296,9 +308,7 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
             for selector in selectors:
                 original_value = row._mapping[selector.column]
                 if original_value != None:
-                    context['__original_value__'] = original_value
                     anonymized_value = str(anonymize_value(selector, original_value, context))
-                    context[selector.column] = anonymized_value
                     
                     update_stmt = (
                         update(table)
@@ -481,36 +491,36 @@ if __name__ == '__main__':
         counter = 0
         # database handling:
         if source_is_database:
-            counter = anonymize_db(source_name, selectors, ARGS.encoding)
+            counter = anonymize_db(source.name, selectors, ARGS.encoding)
 
         # file handling:
         else:
-            target = source_name + '_anonymized' # fixme: allow to set the targetfilename following a pattern
-            if os.path.isfile(source_name) or source_is_database:
+            target = source.name + '_anonymized' # fixme: allow to set the targetfilename following a pattern
+            if os.path.isfile(source.name) or source_is_database:
                 print('anonymizing file %s selector %s to file %s' %
-                    (source_name, selector, target))
+                    (source.name, selector, target))
 
                 # depending on selector, read csv or xml:
                 if selector.input_type == 'csv':
-                    counter = anonymize_csv(source_name, target, selectors, int(ARGS.headerLines), ARGS.encoding, delimiter)
+                    counter = anonymize_csv(source.name, target, selectors, int(ARGS.headerLines), ARGS.encoding, delimiter)
                 else:
                     namespaces = {}
                     if ARGS.namespace is not None:
                         for value in ARGS.namespace:
                             entry = value.split('=')
                             namespaces[entry[0]] = entry[1]
-                    counter = anonymize_xml(source_name, target, selectors, ARGS.encoding, namespaces)
+                    counter = anonymize_xml(source.name, target, selectors, ARGS.encoding, namespaces)
 
                 # move anonymized file to original file
                 if ARGS.overwrite:
-                    print('overwriting original file %s with anonymized file!' % source_name)
-                    shutil.move(src=target, dst=source_name)
+                    print('overwriting original file %s with anonymized file!' % source.name)
+                    shutil.move(src=target, dst=source.name)
 
             else:
                 if ARGS.ignoreMissingFile:
-                    print('ignoring missing file %s' % source_name)
+                    print('ignoring missing file %s' % source.name)
                 else:
-                    print('file %s does not exist!' % source_name)
+                    print('file %s does not exist!' % source.name)
                     sys.exit(1)
 
         total_counter += counter
