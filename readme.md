@@ -64,7 +64,9 @@ See the examples below for more and more complicated examples.
 
 Please note that if the xml uses namespaces the anonymization might not work when the xpath expression does not correctly use the correct namespace.
 
-Use the ```--namespace``` argument to add one or more namespaces to be used during xpatht selection. See the example section for - well - an example.
+Use the ```--namespace``` argument to add one or more namespaces to be used during xpath selection. See the example section for - well - an example.
+
+Please note, as the right most colon in the input string is used as a separator between the filename and the selector, you must escape the colon in the xpath expression with a double colon! See examples for details.
 
 ## Installation
 
@@ -95,15 +97,26 @@ The testfiles directory contains some test csv files that demonstrate the usage:
 Anonymize the person id in all files, first and last name in persons file
 
 ```sh
-# anonymize columns in mulitple csv files:
+# anonymize id columns in mulitple csv files:
+./multi_anonymizer.py --header-lines 1 --type number \
+  --input testfiles/persons.csv:0 testfiles/addresses.csv:1
+
+# new syntax:
 ./multi_anonymizer.py --header-lines 1 \
-  --input testfiles/persons.csv:0 testfiles/addresses.csv:1 
+  --input "testfiles/persons.csv:(type=number,column=0)" "testfiles/addresses.csv:(type=number,column=1)"
 
 ./multi_anonymizer.py --header-lines 1  --overwrite --type first_name \
   --input testfiles/persons.csv_anonymized:1
 
 ./multi_anonymizer.py --header-lines 1 --overwrite --type last_name \
   --input testfiles/persons.csv_anonymized:2
+
+# new syntax
+# if same file is modified, '--overwrite' is needed. 
+# As the filename does not end in 'csv', 'input_type' is also needed!
+./multi_anonymizer.py --header-lines 1 --overwrite \
+  --input "testfiles/persons.csv_anonymized:(input_type=csv,type=first_name,column=1)" \
+          "testfiles/persons.csv_anonymized:(input_type=csv,type=last_name,column=2)"
 
 # support wildcards in file paths (even recursive directories) - need quotes for wildcards to be passed to script:
 ./multi_anonymizer.py --header-lines 1 --overwrite --type last_name \
@@ -136,7 +149,7 @@ Anonymize element and attribute values in xml files. Use xpath for selection of 
   --input testfiles/addresses.xml_anonymized:./person/address/zip
 ```
 
-Use selector (filter) for elements, then choose the attribute to be anonymized:
+Use xpath selector (filter) for elements, then choose the attribute to be anonymized:
 
 ```sh
 # do advanced xpath filtering (need single quotes for braces):
@@ -151,10 +164,18 @@ Use selector (filter) for elements, then choose the attribute to be anonymized:
 
 #### Namespaces
 
+NOTE: Colons in xpath expressions need to be escaped by a double colon to allow proper separation between the input file and the xpath expression (right most colon):
+
 ```sh
 ./multi_anonymizer.py --type last_name \
-  --namespace adr=https://github.com/cdaller/multi_anonymizer/addressbook \
-  --input testfiles/addresses_ns.xml:./adr:person/lastname
+  --namespace adr=https://github.com/cdaller/csv_anonymizer/addressbook  \
+  --input testfiles/addresses_ns.xml:./adr::person/lastname
+
+# new syntax
+./multi_anonymizer.py \
+  --namespace adr=https://github.com/cdaller/csv_anonymizer/addressbook  \
+  --input "testfiles/addresses_ns.xml:(type=last_name,xpath=./adr::person/lastname)"
+
 ```
 
 As there is no such thing as default namespaces in xpath, just use any prefix for the namespace mapping and for the xpath expression. 
@@ -176,12 +197,34 @@ Please note that for database anonymization, the anonymized values always replac
 # create test database:
 testfiles/create_sqlite.py testfiles/my_database.db
 
-# anonymize name columnt in table people
-./multi_anonymizer.py --type name \
-  --input sqlite:///testfiles/my_database.db:people/name
-./multi_anonymizer.py --type number:18:48 \
-  --input sqlite:///testfiles/my_database.db:people/age
+# anonymize name column in table people
+./multi_anonymizer.py \
+  --input "sqlite:///testfiles/my_database.db:(input_type=db,type=name,table=people,column=name)"
 
+# anonymize age column using a min/max age  
+./multi_anonymizer.py \
+  --input "sqlite:///testfiles/my_database.db:(type=number,min=18,max=48,table=people,column=age)"
+```
+
+Note: for MSSql you need to install the odbc driver (on Linux/Mac) and then pass the parameters url-encoded as odbc_connect query parameter:
+
+```bash
+./multi_anonymizer.py --type word \
+  --input "mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dliferay-db%3BUID%3Dsa%3BPWD%3Dxxxx%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes:User_/screenName"
+```
+
+The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor problems on MSSql!
+
+### Multiple anonymized values and templates
+
+If you have a table of columns ```first_name```, ```last_name```, ```email``` and the content of column ```email``` needs to be in sync with the first and last name, you can use the template feature which also allows some string modifications like upper-, lowercasing:
+
+```bash
+./multi_anonymizer.py --header-lines 1  --overwrite \
+  --input \
+    testfiles/persons.csv:(input_type=csv,type=first_name,column=1) \
+    testfiles/persons.csv:(input_type=csv,type=last_name,column=2) \
+    testfiles/persons.csv:(input_type=csv,column=3,template="{anon['first_name'].lower()}.{anon['last_name'].lower}@foobar.com")
 ```
 
 ## Thanks

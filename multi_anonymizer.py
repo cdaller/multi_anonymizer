@@ -39,6 +39,9 @@ except ImportError:
     sql_available = False
 
 
+FAKER_DICTS = {}
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Anonymize columns of one ore more csv files', formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-i', '--input', nargs='+', dest='input',
@@ -68,34 +71,100 @@ def parse_args():
                              'xpath selector, sepearate with equals')
     return parser
 
+class Selector:
+    def __init__(self, input_string, legacy_data_type = None):
+        self.data_type = None
+        self.input_type = legacy_data_type
+        self.table = None
+        self.column = None
+        self.xpath = None
+        self.template = '{anon[0]}'
+        self.min = 0
+        self.max = 1000000
+        self.parse_and_set(input_string, legacy_data_type)
+    
+    def __str__(self):
+        if self.input_type == 'csv':
+            return f'Selector[data_type={self.data_type}, input_type={self.input_type}, column={self.column}'
+        if self.input_type == 'xml':
+            return f'Selector[data_type={self.data_type}, input_type={self.input_type}, xpath={self.xpath}'
+        if self.input_type == 'db':
+            return f'Selector[data_type={self.data_type}, input_type={self.input_type}, table={self.table}, column={self.column}'
+        return f'Selector[data_type={self.data_type}, input_type={self.input_type}, table={self.table}, column={self.column}, xpath={self.xpath}'
+
+    def parse_and_set(self, input_string, legacy_type = None):
+        if input_string.startswith('(') and input_string.endswith(')'):
+            input_parts = input_string.strip("()").split(',')
+
+            attributes = {}
+            for part in input_parts:
+                key, value = part.split('=')
+                attributes[key] = value
+
+            self.data_type = attributes.get('type', self.data_type)
+            self.table = attributes.get('table', self.table)
+            self.column = attributes.get('column', self.column)
+            self.xpath = attributes.get('xpath', self.xpath)
+            self.input_type = attributes.get('input-type', self.input_type)
+            self.template = attributes.get('template', self.template)
+            self.min = int(attributes.get('min', self.min))
+            self.max = int(attributes.get('max', self.max))
+
+        else:
+            # legacy parameter setting:
+            if input_string.isnumeric():
+                self.input_type = 'csv'
+                self.data_type = legacy_type
+                self.column = input_string
+                self.template = '{anon[0]}'
+            else:
+                self.input_type = 'xml'
+                self.data_type = legacy_type
+                self.xpath = input_string
+                self.template = '{anon[0]}'
+
+def get_fake_dict(selector: Selector):
+    global FAKER_DICTS
+
+    fake_dict = FAKER_DICTS.get(selector.data_type, None)
+    if fake_dict is None:
+        fake_dict = create_faker_dict(selector)
+        FAKER_DICTS[selector.data_type] = fake_dict
+    return fake_dict
+    
+
 
 def getRandomInt(start: int = 0, end: int = 1000000):
     return lambda: random.randint(start, end)
 
 
-def anonymize_rows(rows, column_index):
+def anonymize_rows(rows, selector: Selector):
     """
     Rows is an iterable of dictionaries that contain name and
     email fields that need to be anonymized.
     """
-    # Load the faker and its providers
 
+    column_index = int(selector.column)
     # Iterate over the rows and yield anonymized rows.
     for row in rows:
         # Replace the column with faked fields if filled (trim whitespace first):
 
         if len(row) > column_index:
             if len(row[column_index].strip()) > 0:
-                row[column_index] = FAKE_DICT[row[column_index].strip().replace('\n', '')]
+                row[column_index] = get_fake_dict(selector)[row[column_index].strip().replace('\n', '')]
         # Yield the row back to the caller
         yield row
 
 
-def anonymize_csv(source_file_name, target_file_name, column_index, header_lines, encoding, delimiter) -> int:
+def anonymize_csv(source_file_name, target_file_name, selector, header_lines, encoding, delimiter) -> int:
     """
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
     """
+    if selector.column is None:
+        print("No column index given!")
+        sys.exit(-3)
+
     counter = 0
     with open(source_file_name, 'r', encoding=encoding, newline=None) as inputfile:
         with open(target_file_name, 'w', encoding=encoding) as outputfile:
@@ -108,17 +177,17 @@ def anonymize_csv(source_file_name, target_file_name, column_index, header_lines
             while skip_lines > 0:
                 writer.writerow(next(reader))
                 skip_lines = skip_lines - 1
-            for row in anonymize_rows(reader, column_index):
+            for row in anonymize_rows(reader, selector):
                 writer.writerow(row)
                 counter += 1
     return counter
 
 
-def anonymize_xml(source_file_name, target_file_name, selector, encoding, namespaces) -> int:
+def anonymize_xml(source_file_name, target_file_name, selector: Selector, encoding, namespaces) -> int:
     """
     The source argument is a path to an XML file containing data to anonymize,
     while target is a path to write the anonymized data to.
-    The selector is an xpath string to determine which element/attribute to anonymize.
+    The selector holds an xpath string to determine which element/attribute to anonymize.
     """
 
     if not xml_available:
@@ -128,7 +197,7 @@ def anonymize_xml(source_file_name, target_file_name, selector, encoding, namesp
     parser = etree.XMLParser(remove_blank_text=True, encoding=encoding)  # for pretty print
     tree = etree.parse(input_name, parser=parser)
 
-    selector_parts = selector.split('/@')
+    selector_parts = selector.xpath.split('/@')
     element_selector = selector_parts[0]
     attribute_name = None
     if len(selector_parts) > 1:
@@ -137,10 +206,10 @@ def anonymize_xml(source_file_name, target_file_name, selector, encoding, namesp
     counter = 0
     for element in tree.xpath(element_selector, namespaces=namespaces):
         if attribute_name is None:
-            element.text = str(FAKE_DICT[element.text])
+            element.text = str(get_fake_dict(selector)[element.text])
         else:
             old_value = element.attrib[attribute_name]
-            new_value = str(FAKE_DICT[old_value])  # convert numbers to string
+            new_value = str(get_fake_dict(selector)[old_value])  # convert numbers to string
             element.attrib[attribute_name] = new_value
         counter += 1
     result = etree.tostring(tree, pretty_print=True).decode(encoding)
@@ -148,19 +217,22 @@ def anonymize_xml(source_file_name, target_file_name, selector, encoding, namesp
         outputfile.write(result)
     return counter
 
-def anonymize_db(connection_string, selector, encoding) -> int:
+def anonymize_db(connection_string, selector: Selector, encoding) -> int:
 
-    [table_name, column_name] = selector.split('/')
+    if selector.table is None or selector.column is None:
+        print("No table or column given!")
+        sys.exit(-3)
+
 
     engine = create_engine(connection_string, echo = False)
     metadata = MetaData()
-    table = Table(table_name, metadata, autoload_with = engine)
+    table = Table(selector.table, metadata, autoload_with = engine)
 
     counter = 0
 
     # Connect to the database
     with engine.connect() as connection:
-        select_stmt = select(table.c[column_name])
+        select_stmt = select(table.c[selector.column])
         result = connection.execute(select_stmt)
 
         # Iterate over the rows and anonymize the value
@@ -168,12 +240,12 @@ def anonymize_db(connection_string, selector, encoding) -> int:
             original_value = row[0]
             # FIXME: handle numeric values
             if original_value != None:
-                anonymized_value = str(FAKE_DICT[original_value])
+                anonymized_value = str(get_fake_dict(selector)[original_value])
                 
                 update_stmt = (
                     update(table)
-                    .where(table.c[column_name] == bindparam('orig_value'))
-                    .values({column_name: bindparam('new_value')})
+                    .where(table.c[selector.column] == bindparam('orig_value'))
+                    .values({selector.column: bindparam('new_value')})
                 )
                 connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
                 print(f'replacing {original_value} with {anonymized_value}')
@@ -182,6 +254,62 @@ def anonymize_db(connection_string, selector, encoding) -> int:
         connection.commit()
     
     return counter
+
+
+def create_faker_dict(selector: Selector) -> {}:
+    # Create mappings of names & emails to faked names & emails.
+    data_type = selector.data_type
+    if data_type == 'name':
+        fake_dict = defaultdict(FAKER.name)
+    if data_type == 'first_name':
+        fake_dict = defaultdict(FAKER.first_name)
+    if data_type == 'last_name':
+        fake_dict = defaultdict(FAKER.last_name)
+    if data_type.startswith('number'):
+        fake_dict = defaultdict(getRandomInt(selector.min, selector.max))
+    if data_type == 'email':
+        fake_dict = defaultdict(FAKER.email)
+    if data_type == 'phone_number':
+        fake_dict = defaultdict(FAKER.phone_number)
+    if data_type == 'zip':
+        fake_dict = defaultdict(FAKER.postcode)
+    if data_type == 'postcode':
+        fake_dict = defaultdict(FAKER.postcode)
+    if data_type == 'city':
+        fake_dict = defaultdict(FAKER.city)
+    if data_type == 'street':
+        fake_dict = defaultdict(FAKER.street_address)
+    if data_type == 'street_address':
+        fake_dict = defaultdict(FAKER.street_address)
+    if data_type == 'iban':
+        fake_dict = defaultdict(FAKER.iban)
+    if data_type == 'sentence':
+        fake_dict = defaultdict(FAKER.sentence)
+    if data_type == 'word':
+        fake_dict = defaultdict(FAKER.word)
+    if data_type == 'text':
+        fake_dict = defaultdict(FAKER.text)
+    if data_type == 'date':
+        fake_dict = defaultdict(FAKER.date)
+    if data_type == 'uuid4':
+        fake_dict = defaultdict(FAKER.uuid4)
+    if data_type == 'company':
+        fake_dict = defaultdict(FAKER.company)
+
+    return fake_dict
+
+def find_rightmost_colon(input_string):
+    # Use a negative lookbehind assertion to exclude '::'
+    pattern = r'(?<!:):(?!:)'
+    
+    matches = re.finditer(pattern, input_string)
+    positions = [match.start() for match in matches]
+    
+    if positions:
+        return max(positions)
+    else:
+        return None
+
 
 if __name__ == '__main__':
     parser = parse_args()
@@ -193,46 +321,6 @@ if __name__ == '__main__':
 
     FAKER = Factory.create(ARGS.locale)
 
-    # Create mappings of names & emails to faked names & emails.
-    if ARGS.type == 'name':
-        FAKE_DICT = defaultdict(FAKER.name)
-    if ARGS.type == 'first_name':
-        FAKE_DICT = defaultdict(FAKER.first_name)
-    if ARGS.type == 'last_name':
-        FAKE_DICT = defaultdict(FAKER.last_name)
-    if ARGS.type.startswith('number'):
-        type_arg_split = ARGS.type.split(':')
-        start_num = int(type_arg_split[1]) if len(type_arg_split) > 1 else 0
-        end_num = int(type_arg_split[2]) if len(type_arg_split) > 2 else 1000000
-        FAKE_DICT = defaultdict(getRandomInt(start_num, end_num))
-    if ARGS.type == 'email':
-        FAKE_DICT = defaultdict(FAKER.email)
-    if ARGS.type == 'phone_number':
-        FAKE_DICT = defaultdict(FAKER.phone_number)
-    if ARGS.type == 'zip':
-        FAKE_DICT = defaultdict(FAKER.postcode)
-    if ARGS.type == 'postcode':
-        FAKE_DICT = defaultdict(FAKER.postcode)
-    if ARGS.type == 'city':
-        FAKE_DICT = defaultdict(FAKER.city)
-    if ARGS.type == 'street':
-        FAKE_DICT = defaultdict(FAKER.street_address)
-    if ARGS.type == 'street_address':
-        FAKE_DICT = defaultdict(FAKER.street_address)
-    if ARGS.type == 'iban':
-        FAKE_DICT = defaultdict(FAKER.iban)
-    if ARGS.type == 'sentence':
-        FAKE_DICT = defaultdict(FAKER.sentence)
-    if ARGS.type == 'word':
-        FAKE_DICT = defaultdict(FAKER.word)
-    if ARGS.type == 'text':
-        FAKE_DICT = defaultdict(FAKER.text)
-    if ARGS.type == 'date':
-        FAKE_DICT = defaultdict(FAKER.date)
-    if ARGS.type == 'uuid4':
-        FAKE_DICT = defaultdict(FAKER.uuid4)
-    if ARGS.type == 'company':
-        FAKE_DICT = defaultdict(FAKER.company)
     # special handling for tab delimiter to allow easier passing as command line:
     if ARGS.delimiter == "\t":
         print('Detected tab as delimiter')
@@ -240,13 +328,16 @@ if __name__ == '__main__':
     delimiter = ARGS.delimiter
 
     for input_source in ARGS.input:
-        parts = input_source.rsplit(':', 1)
-        if len(parts) < 2:
-            print('Missing csv column, xpath expression or table/column name!')
+        # split file name and selector by the right most colon:
+        split_index = find_rightmost_colon(input_source)
+        if split_index is None:
+            print('Syntax error: no colon found as separator between input source and selector!')
             sys.exit(2)
-        input_name = parts[0]
-        selector = parts[1]
+        input_name = input_source[:split_index]
+        selector_string = input_source[split_index+1:]
+        selector_string = selector_string.replace('::', ':')
 
+        # FIXME: remove source_is_database?? read from selector
         source_is_database = False
         if '://' in input_name:
             source_is_database = True
@@ -266,22 +357,32 @@ if __name__ == '__main__':
 
         for input in inputs_to_read:
             source = input
+
+            selector = Selector(selector_string, ARGS.type)
+            if selector.input_type is None:
+                if source.endswith('.csv'): 
+                    selector.input_type = 'csv'
+                if source.endswith('.xml'):
+                    selector.input_type = 'xml'
+                if '://' in source:
+                    selector.input_type = 'db'
+
             counter = 0
             # database handling:
             if source_is_database:
-                print('anonymizing file %s selector %s as type %s' % (source, selector, ARGS.type))
+                print('anonymizing file %s selector %s as type %s' % (source, selector_string, selector.data_type))
                 counter = anonymize_db(source, selector, ARGS.encoding)
 
             # file handling:
             else:
                 target = source + '_anonymized' # fixme: allow to set the targetfilename following a pattern
                 if os.path.isfile(source) or source_is_database:
-                    print('anonymizing file %s selector %s as type %s to file %s' %
-                        (source, selector, ARGS.type, target))
+                    print('anonymizing file %s selector %s to file %s' %
+                        (source, selector, target))
 
                     # depending on selector, read csv or xml:
-                    if selector.isnumeric():
-                        counter = anonymize_csv(source, target, int(selector), int(ARGS.headerLines), ARGS.encoding, delimiter)
+                    if selector.input_type == 'csv':
+                        counter = anonymize_csv(source, target, selector, int(ARGS.headerLines), ARGS.encoding, delimiter)
                     else:
                         namespaces = {}
                         if ARGS.namespace is not None:
