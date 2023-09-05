@@ -21,8 +21,10 @@ cursor = conn.cursor()
 create_table_query = '''
 CREATE TABLE IF NOT EXISTS people (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    age INTEGER
+    first_name TEXT,
+    last_name TEXT,
+    age INTEGER,
+    email TEXT
 );
 '''
 cursor.execute(create_table_query)
@@ -30,17 +32,19 @@ conn.commit()
 
 # Generate and insert fake names into the 'people' table
 for _ in range(10):  # Adjust the number of entries you want to add
-    name = fake.name()
+    first_name = fake.first_name()
+    last_name = fake.last_name()
     age = fake.random_int(min=18, max=99)
+    email = fake.word() + '@example.com'
     
-    insert_query = "INSERT INTO people (name, age) VALUES (?, ?)"
-    cursor.execute(insert_query, (name, age))
+    insert_query = "INSERT INTO people (first_name, last_name, age, email) VALUES (?, ?, ?, ?)"
+    cursor.execute(insert_query, (first_name, last_name, age, email))
 
 # insert a null values as a valid test case
-insert_query = "INSERT INTO people (name, age) VALUES (?, ?)"
-cursor.execute(insert_query, (None, 21))
-insert_query = "INSERT INTO people (name, age) VALUES (?, ?)"
-cursor.execute(insert_query, ('No Age', None))
+insert_query = "INSERT INTO people (first_name, last_name, age) VALUES (?, ?, ?)"
+cursor.execute(insert_query, (None, None, 21))
+insert_query = "INSERT INTO people (first_name, last_name, age) VALUES (?, ?, ?)"
+cursor.execute(insert_query, ('Charles', 'No Age', None))
 conn.commit()
 
 # Close the database connection

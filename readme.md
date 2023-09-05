@@ -74,17 +74,21 @@ Script runs with python 3 (3.8.x and above).
 
 Install faker python library and other dependencies:
 
-```
+```bash
 pip3 install faker
 pip3 install glob2
+pip3 install jinja2
+# optional, only needed when you want to parse xml files:
 pip3 install lxml
 ```
 
 Might need to do with sudo:
 
-```
+```bash
 sudo -H pip3 install faker
 sudo -H pip3 install glob2
+sudo -H pip3 install jinja2
+# optional, only needed when you want to parse xml files:
 sudo -H pip3 install lxml
 ```
 
@@ -171,10 +175,11 @@ NOTE: Colons in xpath expressions need to be escaped by a double colon to allow 
   --namespace adr=https://github.com/cdaller/csv_anonymizer/addressbook  \
   --input testfiles/addresses_ns.xml:./adr::person/lastname
 
-# new syntax
-./multi_anonymizer.py \
+# new syntax allows to anonymize two different properties at once (needs --overwrite)!
+./multi_anonymizer.py --overwrite \
   --namespace adr=https://github.com/cdaller/csv_anonymizer/addressbook  \
-  --input "testfiles/addresses_ns.xml:(type=last_name,xpath=./adr::person/lastname)"
+  --input "testfiles/addresses_ns.xml:(type=last_name,xpath=./adr::person/lastname)" \
+          "testfiles/addresses_ns.xml:(type=first_name,xpath=./adr::person/firstname)"
 
 ```
 
@@ -222,9 +227,9 @@ If you have a table of columns ```first_name```, ```last_name```, ```email``` an
 ```bash
 ./multi_anonymizer.py --header-lines 1  --overwrite \
   --input \
-    testfiles/persons.csv:(input_type=csv,type=first_name,column=1) \
-    testfiles/persons.csv:(input_type=csv,type=last_name,column=2) \
-    testfiles/persons.csv:(input_type=csv,column=3,template="{anon['first_name'].lower()}.{anon['last_name'].lower}@foobar.com")
+    "testfiles/persons.csv:(input_type=csv,type=first_name,column=1,template='{{value}}_ANONYMIZED)" \
+    "testfiles/persons.csv:(input_type=csv,type=last_name,column=2)" \
+    "testfiles/persons.csv:(input_type=csv,column=3,template="{anon['first_name'].lower()}.{anon['last_name'].lower}@foobar.com")"
 ```
 
 ## Thanks

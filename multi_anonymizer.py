@@ -24,6 +24,7 @@ from collections import defaultdict
 import time
 
 import glob2 as glob
+from jinja2 import Template
 from faker import Factory
 
 try:
@@ -37,6 +38,7 @@ try:
     sql_available = True
 except ImportError:
     sql_available = False
+
 
 
 FAKER_DICTS = {}
@@ -73,12 +75,12 @@ def parse_args():
 
 class Selector:
     def __init__(self, input_string, legacy_data_type = None):
-        self.data_type = None
-        self.input_type = legacy_data_type
+        self.data_type = legacy_data_type
+        self.input_type = None
         self.table = None
         self.column = None
         self.xpath = None
-        self.template = '{anon[0]}'
+        self.template = '{{value}}'
         self.min = 0
         self.max = 1000000
         self.parse_and_set(input_string, legacy_data_type)
@@ -92,13 +94,13 @@ class Selector:
             return f'Selector[data_type={self.data_type}, input_type={self.input_type}, table={self.table}, column={self.column}'
         return f'Selector[data_type={self.data_type}, input_type={self.input_type}, table={self.table}, column={self.column}, xpath={self.xpath}'
 
-    def parse_and_set(self, input_string, legacy_type = None):
+    def parse_and_set(self, input_string, legacy_data_type = None):
         if input_string.startswith('(') and input_string.endswith(')'):
             input_parts = input_string.strip("()").split(',')
 
             attributes = {}
             for part in input_parts:
-                key, value = part.split('=')
+                key, value = part.strip().split('=')
                 attributes[key] = value
 
             self.data_type = attributes.get('type', self.data_type)
@@ -114,14 +116,10 @@ class Selector:
             # legacy parameter setting:
             if input_string.isnumeric():
                 self.input_type = 'csv'
-                self.data_type = legacy_type
                 self.column = input_string
-                self.template = '{anon[0]}'
             else:
                 self.input_type = 'xml'
-                self.data_type = legacy_type
                 self.xpath = input_string
-                self.template = '{anon[0]}'
 
 def get_fake_dict(selector: Selector):
     global FAKER_DICTS
@@ -132,6 +130,11 @@ def get_fake_dict(selector: Selector):
         FAKER_DICTS[selector.data_type] = fake_dict
     return fake_dict
     
+def anonymize_value(selector: Selector, original_value):
+    jinja_template = Template(selector.template)
+    anonymized_value = get_fake_dict(selector)[original_value]
+    context = { 'value': anonymized_value}
+    return jinja_template.render(**context)
 
 
 def getRandomInt(start: int = 0, end: int = 1000000):
@@ -151,7 +154,9 @@ def anonymize_rows(rows, selector: Selector):
 
         if len(row) > column_index:
             if len(row[column_index].strip()) > 0:
-                row[column_index] = get_fake_dict(selector)[row[column_index].strip().replace('\n', '')]
+                original_value = row[column_index].strip().replace('\n', '')
+                anonymized_value = anonymize_value(selector, original_value)
+                row[column_index] = anonymized_value
         # Yield the row back to the caller
         yield row
 
@@ -206,10 +211,10 @@ def anonymize_xml(source_file_name, target_file_name, selector: Selector, encodi
     counter = 0
     for element in tree.xpath(element_selector, namespaces=namespaces):
         if attribute_name is None:
-            element.text = str(get_fake_dict(selector)[element.text])
+            element.text = str(anonymize_value(selector, element.text))
         else:
             old_value = element.attrib[attribute_name]
-            new_value = str(get_fake_dict(selector)[old_value])  # convert numbers to string
+            new_value = str(anonymize_value(selector, old_value))  # convert numbers to string
             element.attrib[attribute_name] = new_value
         counter += 1
     result = etree.tostring(tree, pretty_print=True).decode(encoding)
@@ -240,7 +245,7 @@ def anonymize_db(connection_string, selector: Selector, encoding) -> int:
             original_value = row[0]
             # FIXME: handle numeric values
             if original_value != None:
-                anonymized_value = str(get_fake_dict(selector)[original_value])
+                anonymized_value = str(anonymize_value(selector, original_value))
                 
                 update_stmt = (
                     update(table)
