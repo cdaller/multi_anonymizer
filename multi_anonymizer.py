@@ -13,7 +13,7 @@ Author: Christof Dallermassl
 License: Apache License 2.0
 """
 
-from typing import List
+from typing import List, Dict
 
 import argparse
 import csv
@@ -24,9 +24,10 @@ import sys
 import re
 from collections import defaultdict
 import time
+# from unidecode import unidecode
 
 import glob2 as glob
-from jinja2 import Template
+from jinja2 import Template, Environment, FileSystemLoader
 from faker import Factory
 
 try:
@@ -82,21 +83,30 @@ class Selector:
         self.table = None
         self.column = None
         self.xpath = None
-        self.template = '{{value}}'
+        self.template = '{{__value__}}'
         self.min = 0
         self.max = 1000000
         self.parse_and_set(input_string, legacy_data_type)
     
     def __str__(self):
+        base_string = f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', "
         if self.input_type == 'csv':
-            return f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', column='{self.column}'"
-        if self.input_type == 'xml':
-            return f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', xpath='{self.xpath}'"
-        if self.input_type == 'db':
-            return f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', table='{self.table}', column='{self.column}'"
-        return f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', table='{self.table}', column='{self.column}', xpath='{self.xpath}'"
+            base_string = base_string + f"column='{self.column}'"
+        elif self.input_type == 'xml':
+            base_string = base_string + f"xpath='{self.xpath}'"
+        elif self.input_type == 'db':
+            base_string = base_string + f"table='{self.table}', column='{self.column}'"
+        else:
+            base_string = base_string + f"table='{self.table}', column='{self.column}', xpath='{self.xpath}'"
+        if self.template is not None:
+            base_string = base_string + f", template='{self.template}'"
+        return base_string + ']'
 
     def parse_and_set(self, input_string, legacy_data_type = None):
+        if input_string.startswith('(') and not input_string.endswith(')'):
+            print(f"Selector string is not correctly put in brackets: '{input_string}'")
+            sys.exit(4)
+
         if input_string.startswith('(') and input_string.endswith(')'):
             input_parts = input_string.strip("()").split(',')
 
@@ -123,6 +133,21 @@ class Selector:
                 self.input_type = 'xml'
                 self.xpath = input_string
 
+class Source:
+    def __init__(self, name, sub_source):
+        self.name = name
+        self.sub_source = sub_source
+    
+    def __hash__(self):
+        return hash((self.name, self.sub_source))
+    
+    def __eq__(self, other):
+        return (self.name, self.sub_source) == (other.name, other.sub_source)
+
+    def __str__(self):
+        return f"Source: {self.name}, Sub Source: {self.sub_source}"
+
+
 def get_fake_dict(selector: Selector):
     global FAKER_DICTS
 
@@ -132,11 +157,11 @@ def get_fake_dict(selector: Selector):
         FAKER_DICTS[selector.data_type] = fake_dict
     return fake_dict
     
-def anonymize_value(selector: Selector, original_value):
-    jinja_template = Template(selector.template)
+def anonymize_value(selector: Selector, original_value, context: Dict[str, str] = {}):
+    jinja_template = template_env.from_string(selector.template)
     anonymized_value = get_fake_dict(selector)[original_value]
-    context = { 'value': anonymized_value}
-    return jinja_template.render(**context)
+    context['__value__'] = anonymized_value
+    return jinja_template.render(context)
 
 
 def getRandomInt(start: int = 0, end: int = 1000000):
@@ -246,24 +271,34 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
     # Connect to the database
     with engine.connect() as connection:
 
+        # all selectors operate on the same table
+        metadata = MetaData()
+        table = Table(selectors[0].table, metadata, autoload_with = engine)
+
+        columns_to_select = []
         for selector in selectors:
 
-            if selector.table is None or selector.column is None:
-                print(f'No table or column given in selector {selector}')
+            if selector.table is None:
+                print(f'No table given in selector {selector}')
                 sys.exit(3)
 
-            metadata = MetaData()
-            table = Table(selector.table, metadata, autoload_with = engine)
+            columns_to_select.append(selector.column)
 
-            select_stmt = select(table.c[selector.column])
-            result = connection.execute(select_stmt)
+        # Convert column names to actual table columns
+        selected_columns = [getattr(table.c, col_name) for col_name in columns_to_select]
 
-            # Iterate over the rows and anonymize the value
-            for row in result:
-                original_value = row[0]
-                # FIXME: handle numeric values
+        select_stmt = select(*selected_columns)
+        result = connection.execute(select_stmt)
+
+        # Iterate over the rows and anonymize the value
+        for row in result:
+            context = {}
+            for selector in selectors:
+                original_value = row._mapping[selector.column]
                 if original_value != None:
-                    anonymized_value = str(anonymize_value(selector, original_value))
+                    context['__original_value__'] = original_value
+                    anonymized_value = str(anonymize_value(selector, original_value, context))
+                    context[selector.column] = anonymized_value
                     
                     update_stmt = (
                         update(table)
@@ -271,7 +306,7 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
                         .values({selector.column: bindparam('new_value')})
                     )
                     connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
-                    print(f'replacing {original_value} with {anonymized_value}')
+                    print(f'replacing {selector.column}: {original_value} with {anonymized_value}')
                     counter += 1
 
         connection.commit()
@@ -340,6 +375,25 @@ def print_selector_map(map):
         for sel in selectors:
             print(f'  selector: {sel}')
 
+
+# Define the custom filter
+def unidecode_filter(text):
+#    return unidecode(string)
+    # unidecode for the poor:
+    replacements = {
+            'ä': 'ae',
+            'ö': 'oe',
+            'ü': 'ue',
+            'Ä': 'Ae',
+            'Ö': 'Oe',
+            'Ü': 'Ue',
+            'ß': 'ss'
+        }
+    for char, replacement in replacements.items():
+        text = text.replace(char, replacement)
+    return text
+
+
 if __name__ == '__main__':
     parser = parse_args()
     ARGS = parser.parse_args()
@@ -347,6 +401,11 @@ if __name__ == '__main__':
     if ARGS.input is None:
         parser.print_help(sys.stderr)
         sys.exit(1)
+
+    # Set up Jinja2 environment and add the filter
+    template_env = Environment()  # Assuming your templates are in a 'templates' directory
+    template_env.filters['unidecode'] = unidecode_filter
+
 
     FAKER = Factory.create(ARGS.locale)
 
@@ -386,21 +445,26 @@ if __name__ == '__main__':
         total_counter = 0
         start_time = time.process_time()
 
-        for input in inputs_to_read:
-            source = input
+        for source_name in inputs_to_read:
 
             selector = Selector(selector_string, ARGS.type)
             if selector.input_type is None:
-                if source.endswith('.csv'): 
+                if source_name.endswith('.csv'): 
                     selector.input_type = 'csv'
-                if source.endswith('.xml'):
+                if source_name.endswith('.xml'):
                     selector.input_type = 'xml'
-                if '://' in source:
+                if '://' in source_name:
                     selector.input_type = 'db'
 
             # collect all collectors for a given source:
+            source = Source(source_name, None)
+            # database sources are only one source, if the operate on the same table:
+            if (selector.input_type == "db"):
+                source.sub_source = selector.table
+
             if source not in source_selector_map.keys():
                 source_selector_map[source] = []
+
             source_selector_map[source].append(selector)
 
     # now process all files and apply all selectors to each value to anonymize:
@@ -410,43 +474,43 @@ if __name__ == '__main__':
     for source in source_selector_map.keys():
         selectors = source_selector_map[source]
 
-        print(f"Processing '{source}' with the selectors:")
+        print(f"Processing '{source.name}' with the selectors:")
         for selector in selectors:
             print(f'  {selector}')
 
         counter = 0
         # database handling:
         if source_is_database:
-            counter = anonymize_db(source, selectors, ARGS.encoding)
+            counter = anonymize_db(source_name, selectors, ARGS.encoding)
 
         # file handling:
         else:
-            target = source + '_anonymized' # fixme: allow to set the targetfilename following a pattern
-            if os.path.isfile(source) or source_is_database:
+            target = source_name + '_anonymized' # fixme: allow to set the targetfilename following a pattern
+            if os.path.isfile(source_name) or source_is_database:
                 print('anonymizing file %s selector %s to file %s' %
-                    (source, selector, target))
+                    (source_name, selector, target))
 
                 # depending on selector, read csv or xml:
                 if selector.input_type == 'csv':
-                    counter = anonymize_csv(source, target, selectors, int(ARGS.headerLines), ARGS.encoding, delimiter)
+                    counter = anonymize_csv(source_name, target, selectors, int(ARGS.headerLines), ARGS.encoding, delimiter)
                 else:
                     namespaces = {}
                     if ARGS.namespace is not None:
                         for value in ARGS.namespace:
                             entry = value.split('=')
                             namespaces[entry[0]] = entry[1]
-                    counter = anonymize_xml(source, target, selectors, ARGS.encoding, namespaces)
+                    counter = anonymize_xml(source_name, target, selectors, ARGS.encoding, namespaces)
 
                 # move anonymized file to original file
                 if ARGS.overwrite:
-                    print('overwriting original file %s with anonymized file!' % source)
-                    shutil.move(src=target, dst=source)
+                    print('overwriting original file %s with anonymized file!' % source_name)
+                    shutil.move(src=target, dst=source_name)
 
             else:
                 if ARGS.ignoreMissingFile:
-                    print('ignoring missing file %s' % source)
+                    print('ignoring missing file %s' % source_name)
                 else:
-                    print('file %s does not exist!' % source)
+                    print('file %s does not exist!' % source_name)
                     sys.exit(1)
 
         total_counter += counter
