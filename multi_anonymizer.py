@@ -13,6 +13,8 @@ Author: Christof Dallermassl
 License: Apache License 2.0
 """
 
+from typing import List
+
 import argparse
 import csv
 import os.path
@@ -87,12 +89,12 @@ class Selector:
     
     def __str__(self):
         if self.input_type == 'csv':
-            return f'Selector[data_type={self.data_type}, input_type={self.input_type}, column={self.column}'
+            return f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', column='{self.column}'"
         if self.input_type == 'xml':
-            return f'Selector[data_type={self.data_type}, input_type={self.input_type}, xpath={self.xpath}'
+            return f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', xpath='{self.xpath}'"
         if self.input_type == 'db':
-            return f'Selector[data_type={self.data_type}, input_type={self.input_type}, table={self.table}, column={self.column}'
-        return f'Selector[data_type={self.data_type}, input_type={self.input_type}, table={self.table}, column={self.column}, xpath={self.xpath}'
+            return f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', table='{self.table}', column='{self.column}'"
+        return f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', table='{self.table}', column='{self.column}', xpath='{self.xpath}'"
 
     def parse_and_set(self, input_string, legacy_data_type = None):
         if input_string.startswith('(') and input_string.endswith(')'):
@@ -141,34 +143,36 @@ def getRandomInt(start: int = 0, end: int = 1000000):
     return lambda: random.randint(start, end)
 
 
-def anonymize_rows(rows, selector: Selector):
+def anonymize_rows(rows, selectors: List[Selector]):
     """
     Rows is an iterable of dictionaries that contain name and
     email fields that need to be anonymized.
     """
 
-    column_index = int(selector.column)
     # Iterate over the rows and yield anonymized rows.
     for row in rows:
-        # Replace the column with faked fields if filled (trim whitespace first):
+        for selector in selectors:
 
-        if len(row) > column_index:
-            if len(row[column_index].strip()) > 0:
-                original_value = row[column_index].strip().replace('\n', '')
-                anonymized_value = anonymize_value(selector, original_value)
-                row[column_index] = anonymized_value
+            if selector.column is None:
+                print(f'No column given in selector {selector}')
+                sys.exit(3)
+
+            column_index = int(selector.column)
+            # Replace the column with faked fields if filled (trim whitespace first):
+            if column_index < len(row):
+                if len(row[column_index].strip()) > 0:
+                    original_value = row[column_index].strip().replace('\n', '')
+                    anonymized_value = anonymize_value(selector, original_value)
+                    row[column_index] = anonymized_value
         # Yield the row back to the caller
         yield row
 
 
-def anonymize_csv(source_file_name, target_file_name, selector, header_lines, encoding, delimiter) -> int:
+def anonymize_csv(source_file_name, target_file_name, selectors: List[Selector], header_lines, encoding, delimiter) -> int:
     """
     The source argument is a path to a CSV file containing data to anonymize,
     while target is a path to write the anonymized CSV data to.
     """
-    if selector.column is None:
-        print("No column index given!")
-        sys.exit(-3)
 
     counter = 0
     with open(source_file_name, 'r', encoding=encoding, newline=None) as inputfile:
@@ -182,13 +186,13 @@ def anonymize_csv(source_file_name, target_file_name, selector, header_lines, en
             while skip_lines > 0:
                 writer.writerow(next(reader))
                 skip_lines = skip_lines - 1
-            for row in anonymize_rows(reader, selector):
+            for row in anonymize_rows(reader, selectors):
                 writer.writerow(row)
                 counter += 1
     return counter
 
 
-def anonymize_xml(source_file_name, target_file_name, selector: Selector, encoding, namespaces) -> int:
+def anonymize_xml(source_file_name, target_file_name, selectors: List[Selector], encoding, namespaces) -> int:
     """
     The source argument is a path to an XML file containing data to anonymize,
     while target is a path to write the anonymized data to.
@@ -202,59 +206,73 @@ def anonymize_xml(source_file_name, target_file_name, selector: Selector, encodi
     parser = etree.XMLParser(remove_blank_text=True, encoding=encoding)  # for pretty print
     tree = etree.parse(input_name, parser=parser)
 
-    selector_parts = selector.xpath.split('/@')
-    element_selector = selector_parts[0]
-    attribute_name = None
-    if len(selector_parts) > 1:
-        attribute_name = selector_parts[1]  # /person/address/@id -> id
-
     counter = 0
-    for element in tree.xpath(element_selector, namespaces=namespaces):
-        if attribute_name is None:
-            element.text = str(anonymize_value(selector, element.text))
-        else:
-            old_value = element.attrib[attribute_name]
-            new_value = str(anonymize_value(selector, old_value))  # convert numbers to string
-            element.attrib[attribute_name] = new_value
-        counter += 1
+    for selector in selectors:
+
+        if selector.xpath is None:
+            print(f'No xpath given in selector {selector}')
+            sys.exit(3)
+
+        selector_parts = selector.xpath.split('/@')
+        element_selector = selector_parts[0]
+        attribute_name = None
+        if len(selector_parts) > 1:
+            attribute_name = selector_parts[1]  # /person/address/@id -> id
+
+        for element in tree.xpath(element_selector, namespaces=namespaces):
+            if attribute_name is None:
+                element.text = str(anonymize_value(selector, element.text))
+            else:
+                old_value = element.attrib[attribute_name]
+                new_value = str(anonymize_value(selector, old_value))  # convert numbers to string
+                element.attrib[attribute_name] = new_value
+            counter += 1
+
     result = etree.tostring(tree, pretty_print=True).decode(encoding)
     with open(target_file_name, 'w', encoding=encoding) as outputfile:
         outputfile.write(result)
     return counter
 
-def anonymize_db(connection_string, selector: Selector, encoding) -> int:
+def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
 
-    if selector.table is None or selector.column is None:
-        print("No table or column given!")
-        sys.exit(-3)
-
+    if not sql_available:
+        print('for database processing, the library "sqlalchemy" (and possible some drivers) are needed - please install with pip!')
+        sys.exit(2)
 
     engine = create_engine(connection_string, echo = False)
-    metadata = MetaData()
-    table = Table(selector.table, metadata, autoload_with = engine)
 
     counter = 0
 
     # Connect to the database
     with engine.connect() as connection:
-        select_stmt = select(table.c[selector.column])
-        result = connection.execute(select_stmt)
 
-        # Iterate over the rows and anonymize the value
-        for row in result:
-            original_value = row[0]
-            # FIXME: handle numeric values
-            if original_value != None:
-                anonymized_value = str(anonymize_value(selector, original_value))
-                
-                update_stmt = (
-                    update(table)
-                    .where(table.c[selector.column] == bindparam('orig_value'))
-                    .values({selector.column: bindparam('new_value')})
-                )
-                connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
-                print(f'replacing {original_value} with {anonymized_value}')
-                counter += 1
+        for selector in selectors:
+
+            if selector.table is None or selector.column is None:
+                print(f'No table or column given in selector {selector}')
+                sys.exit(3)
+
+            metadata = MetaData()
+            table = Table(selector.table, metadata, autoload_with = engine)
+
+            select_stmt = select(table.c[selector.column])
+            result = connection.execute(select_stmt)
+
+            # Iterate over the rows and anonymize the value
+            for row in result:
+                original_value = row[0]
+                # FIXME: handle numeric values
+                if original_value != None:
+                    anonymized_value = str(anonymize_value(selector, original_value))
+                    
+                    update_stmt = (
+                        update(table)
+                        .where(table.c[selector.column] == bindparam('orig_value'))
+                        .values({selector.column: bindparam('new_value')})
+                    )
+                    connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
+                    print(f'replacing {original_value} with {anonymized_value}')
+                    counter += 1
 
         connection.commit()
     
@@ -315,6 +333,12 @@ def find_rightmost_colon(input_string):
     else:
         return None
 
+def print_selector_map(map):
+    for key in map.keys():
+        selectors = map[key]
+        print(f"input '{key}':")
+        for sel in selectors:
+            print(f'  selector: {sel}')
 
 if __name__ == '__main__':
     parser = parse_args()
@@ -332,8 +356,10 @@ if __name__ == '__main__':
     #        delimiter = '\t'
     delimiter = ARGS.delimiter
 
+    source_selector_map = {}
+
     for input_source in ARGS.input:
-        # split file name and selector by the right most colon:
+        # split file name and selector by the right most colon (allow escaping of colons in selector by using double colons):
         split_index = find_rightmost_colon(input_source)
         if split_index is None:
             print('Syntax error: no colon found as separator between input source and selector!')
@@ -372,42 +398,58 @@ if __name__ == '__main__':
                 if '://' in source:
                     selector.input_type = 'db'
 
-            counter = 0
-            # database handling:
-            if source_is_database:
-                print('anonymizing file %s selector %s as type %s' % (source, selector_string, selector.data_type))
-                counter = anonymize_db(source, selector, ARGS.encoding)
+            # collect all collectors for a given source:
+            if source not in source_selector_map.keys():
+                source_selector_map[source] = []
+            source_selector_map[source].append(selector)
 
-            # file handling:
-            else:
-                target = source + '_anonymized' # fixme: allow to set the targetfilename following a pattern
-                if os.path.isfile(source) or source_is_database:
-                    print('anonymizing file %s selector %s to file %s' %
-                        (source, selector, target))
+    # now process all files and apply all selectors to each value to anonymize:
+    print('All anonymizations:')
+    print_selector_map(source_selector_map)
 
-                    # depending on selector, read csv or xml:
-                    if selector.input_type == 'csv':
-                        counter = anonymize_csv(source, target, selector, int(ARGS.headerLines), ARGS.encoding, delimiter)
-                    else:
-                        namespaces = {}
-                        if ARGS.namespace is not None:
-                            for value in ARGS.namespace:
-                                entry = value.split('=')
-                                namespaces[entry[0]] = entry[1]
-                        counter = anonymize_xml(source, target, selector, ARGS.encoding, namespaces)
+    for source in source_selector_map.keys():
+        selectors = source_selector_map[source]
 
-                    # move anonymized file to original file
-                    if ARGS.overwrite:
-                        print('overwriting original file %s with anonymized file!' % source)
-                        shutil.move(src=target, dst=source)
+        print(f"Processing '{source}' with the selectors:")
+        for selector in selectors:
+            print(f'  {selector}')
 
+        counter = 0
+        # database handling:
+        if source_is_database:
+            counter = anonymize_db(source, selectors, ARGS.encoding)
+
+        # file handling:
+        else:
+            target = source + '_anonymized' # fixme: allow to set the targetfilename following a pattern
+            if os.path.isfile(source) or source_is_database:
+                print('anonymizing file %s selector %s to file %s' %
+                    (source, selector, target))
+
+                # depending on selector, read csv or xml:
+                if selector.input_type == 'csv':
+                    counter = anonymize_csv(source, target, selectors, int(ARGS.headerLines), ARGS.encoding, delimiter)
                 else:
-                    if ARGS.ignoreMissingFile:
-                        print('ignoring missing file %s' % source)
-                    else:
-                        print('file %s does not exist!' % source)
-                        sys.exit(1)
+                    namespaces = {}
+                    if ARGS.namespace is not None:
+                        for value in ARGS.namespace:
+                            entry = value.split('=')
+                            namespaces[entry[0]] = entry[1]
+                    counter = anonymize_xml(source, target, selectors, ARGS.encoding, namespaces)
 
-            total_counter += counter
-            end_time = time.process_time()
-            print(f'Anonymized {total_counter} values in {(end_time - start_time):.{2}}s')
+                # move anonymized file to original file
+                if ARGS.overwrite:
+                    print('overwriting original file %s with anonymized file!' % source)
+                    shutil.move(src=target, dst=source)
+
+            else:
+                if ARGS.ignoreMissingFile:
+                    print('ignoring missing file %s' % source)
+                else:
+                    print('file %s does not exist!' % source)
+                    sys.exit(1)
+
+        total_counter += counter
+        end_time = time.process_time()
+        print(f'Anonymized {total_counter} values in {(end_time - start_time):.{2}}s')
+
