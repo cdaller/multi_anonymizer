@@ -75,29 +75,29 @@ Script runs with python 3 (3.8.x and above).
 Install faker python library and other dependencies:
 
 ```bash
-pip3 install faker
-pip3 install glob2
-pip3 install jinja2
+pip install faker
+pip install glob2
+pip install jinja2
 # optional, only needed when you want to parse xml files:
-pip3 install lxml
+pip install lxml
 # optional, only needed when you want to anonymize values stored in relational databases
-pip3 install sqlalchemy
+pip install sqlalchemy
 # optional, only needed when you want to anonymize values in json files
-pip3 install jsonpath-ng
+pip install jsonpath-ng
 ```
 
 Might need to do with sudo:
 
 ```bash
-sudo -H pip3 install faker
-sudo -H pip3 install glob2
-sudo -H pip3 install jinja2
+sudo -H pip install faker
+sudo -H pip install glob2
+sudo -H pip install jinja2
 # optional, only needed when you want to parse xml files:
-sudo -H pip3 install lxml
+sudo -H pip install lxml
 # optional, only needed when you want to anonymize values stored in relational databases
-sudo -H pip3 install sqlalchemy
+sudo -H pip install sqlalchemy
 # optional, only needed when you want to anonymize values in json files
-sudo -H pip3 install jsonpath-ng
+sudo -H pip install jsonpath-ng
 ```
 
 ## Examples
@@ -191,12 +191,28 @@ NOTE: Colons in xpath expressions need to be escaped by a double colon to allow 
 # new syntax allows to anonymize two different properties at once (needs --overwrite)!
 ./multi_anonymizer.py --overwrite \
   --namespace adr=https://github.com/cdaller/csv_anonymizer/addressbook  \
-  --input "testfiles/addresses_ns.xml:(type=last_name,xpath=./adr::person/lastname)" \
-          "testfiles/addresses_ns.xml:(type=first_name,xpath=./adr::person/firstname)"
+  --input "testfiles/addresses_ns.xml:(type=last_name,path=./adr::person/lastname)" \
+          "testfiles/addresses_ns.xml:(type=first_name,path=./adr::person/firstname)"
 
 ```
 
-As there is no such thing as default namespaces in xpath, just use any prefix for the namespace mapping and for the xpath expression. 
+As there is no such thing as default namespaces in xpath, just use any prefix for the namespace mapping and for the xpath expression.
+
+### JSON
+
+Similar to XML, json files are anonmized using a jsonpath expression to indicate what should be anonymized.
+
+If json anonymization is used, the python jsonpath-ng package needs to be installed:
+
+```sh
+pip install jsonpath-ng
+```
+
+```bash
+./multi_anonymizer.py --encoding UTF-8 \
+  --input "testfiles/addresses.json:(type=last_name,path=$.addressbook.person[*].lastname)"
+
+```
 
 ### Database
 

@@ -1,0 +1,58 @@
+{
+    "addressbook": {
+        "person": [
+            {
+                "lastname": "Riegler",
+                "firstname": "Valentin",
+                "address": [
+                    {
+                        "id": "123",
+                        "street": "Martinshügel 123",
+                        "city": "Linz",
+                        "zip": "4020",
+                        "country": {
+                            "code": "AT",
+                            "name": "Austria"
+                        }
+                    },
+                    {
+                        "id": "124",
+                        "street": "Wherever 19",
+                        "city": "München",
+                        "zip": "12345",
+                        "country": {
+                            "code": "DE",
+                            "name": "Deutschland"
+                        }
+                    }
+                ]
+            },
+            {
+                "lastname": "Auer",
+                "firstname": "Gabriel",
+                "address": [
+                    {
+                        "id": "125",
+                        "street": "Wienerstrasse 80",
+                        "city": "Graz",
+                        "zip": "1234",
+                        "country": {
+                            "code": "AT",
+                            "name": "Austria"
+                        }
+                    },
+                    {
+                        "id": "126",
+                        "street": "Radetzkystrasse 5",
+                        "city": "Vöcklabruck",
+                        "zip": "4840",
+                        "country": {
+                            "code": "AT",
+                            "name": "Austria"
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+}

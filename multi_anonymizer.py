@@ -42,6 +42,12 @@ try:
 except ImportError:
     sql_available = False
 
+try:
+    import json
+    from jsonpath_ng import jsonpath, parse
+    json_available = True
+except ImportError:
+    json_available = False
 
 
 FAKER_DICTS = {}
@@ -82,7 +88,7 @@ class Selector:
         self.input_type = None
         self.table = None
         self.column = None
-        self.xpath = None
+        self.path = None
         self.template = '{{__value__}}'
         self.min = 0
         self.max = 1000000
@@ -92,12 +98,12 @@ class Selector:
         base_string = f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', "
         if self.input_type == 'csv':
             base_string = base_string + f"column='{self.column}'"
-        elif self.input_type == 'xml':
-            base_string = base_string + f"xpath='{self.xpath}'"
+        elif self.input_type == 'xml' or self.input_type == 'json':
+            base_string = base_string + f"path='{self.path}'"
         elif self.input_type == 'db':
             base_string = base_string + f"table='{self.table}', column='{self.column}'"
         else:
-            base_string = base_string + f"table='{self.table}', column='{self.column}', xpath='{self.xpath}'"
+            base_string = base_string + f"table='{self.table}', column='{self.column}', path='{self.path}'"
         if self.template is not None:
             base_string = base_string + f", template='{self.template}'"
         return base_string + ']'
@@ -118,7 +124,7 @@ class Selector:
             self.data_type = attributes.get('type', self.data_type)
             self.table = attributes.get('table', self.table)
             self.column = attributes.get('column', self.column)
-            self.xpath = attributes.get('xpath', self.xpath)
+            self.path = attributes.get('path', self.path)
             self.input_type = attributes.get('input-type', self.input_type)
             self.template = attributes.get('template', self.template)
             self.min = int(attributes.get('min', self.min))
@@ -131,7 +137,7 @@ class Selector:
                 self.column = input_string
             else:
                 self.input_type = 'xml'
-                self.xpath = input_string
+                self.path = input_string
 
 class Source:
     def __init__(self, name, sub_source):
@@ -168,8 +174,8 @@ def anonymize_value(selector: Selector, original_value, context: Dict[str, str] 
             context["col_" + selector.column] = anonymized_value
         else:
             context[selector.column] = anonymized_value
-    if selector.xpath is not None:
-        context[selector.xpath] = anonymized_value    
+    if selector.path is not None:
+        context[selector.path] = anonymized_value    
 
     return jinja_template.render(context)
 
@@ -240,17 +246,17 @@ def anonymize_xml(source_file_name, target_file_name, selectors: List[Selector],
         sys.exit(2)
 
     parser = etree.XMLParser(remove_blank_text=True, encoding=encoding)  # for pretty print
-    tree = etree.parse(input_name, parser=parser)
+    tree = etree.parse(source_file_name, parser=parser)
 
     counter = 0
     context = {}
     for selector in selectors:
 
-        if selector.xpath is None:
-            print(f'No xpath given in selector {selector}')
+        if selector.path is None:
+            print(f'No path given in selector {selector}')
             sys.exit(3)
 
-        selector_parts = selector.xpath.split('/@')
+        selector_parts = selector.path.split('/@')
         element_selector = selector_parts[0]
         attribute_name = None
         if len(selector_parts) > 1:
@@ -265,10 +271,49 @@ def anonymize_xml(source_file_name, target_file_name, selectors: List[Selector],
                 element.attrib[attribute_name] = anonymized_value
             counter += 1
 
-    result = etree.tostring(tree, pretty_print=True).decode(encoding)
+    result = etree.tostring(tree, pretty_print=True, encoding=encoding).decode(encoding)
     with open(target_file_name, 'w', encoding=encoding) as outputfile:
         outputfile.write(result)
     return counter
+
+def anonymize_json(source_file_name, target_file_name, selectors: List[Selector], encoding) -> int:
+    """
+    The source argument is a path to a json file containing data to anonymize,
+    while target is a path to write the anonymized data to.
+    The selector holds an xpath string to determine which element/attribute to anonymize.
+    """
+
+    if not json_available:
+        print('for json processing, the library "jsonpath-ng" is needed - please install with pip!')
+        sys.exit(2)
+
+    with open(source_file_name, 'r', encoding=encoding) as file:
+        data = json.load(file)
+
+    counter = 0
+    context = {}
+    for selector in selectors:
+
+        if selector.path is None:
+            print(f'No path given in selector {selector}')
+            sys.exit(3)
+
+        jsonpath_expression = parse(selector.path)
+
+        matches = [match.value for match in jsonpath_expression.find(data)]
+
+        for match in jsonpath_expression.find(data):
+            original_value = match.value
+            anonymized_value = str(anonymize_value(selector, original_value, context)) 
+            match.full_path.update(data, anonymized_value)
+            counter += 1
+
+    with open(target_file_name, 'w', encoding=encoding) as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
+
+    return counter
+
+def anonymize_json_string(data, selectors: List[Selector])
 
 def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
 
@@ -458,10 +503,13 @@ if __name__ == '__main__':
         for source_name in inputs_to_read:
 
             selector = Selector(selector_string, ARGS.type)
+            # try to guess the input type (may be overwritten by explicitely setting it in selector)
             if selector.input_type is None:
                 if source_name.endswith('.csv'): 
                     selector.input_type = 'csv'
-                if source_name.endswith('.xml'):
+                elif source_name.endswith('.json'):
+                    selector.input_type = 'json'
+                elif source_name.endswith('.xml'):
                     selector.input_type = 'xml'
                 if '://' in source_name:
                     selector.input_type = 'db'
@@ -503,13 +551,18 @@ if __name__ == '__main__':
                 # depending on selector, read csv or xml:
                 if selector.input_type == 'csv':
                     counter = anonymize_csv(source.name, target, selectors, int(ARGS.headerLines), ARGS.encoding, delimiter)
-                else:
+                elif selector.input_type == 'json':
+                    counter = anonymize_json(source.name, target, selectors, ARGS.encoding)
+                elif selector.input_type == 'xml':
                     namespaces = {}
                     if ARGS.namespace is not None:
                         for value in ARGS.namespace:
                             entry = value.split('=')
                             namespaces[entry[0]] = entry[1]
                     counter = anonymize_xml(source.name, target, selectors, ARGS.encoding, namespaces)
+                else:
+                    print('Could not determine the type of input. Please set with "input_type" to xml, cvs, json or db')
+                    sys.exit(5)
 
                 # move anonymized file to original file
                 if ARGS.overwrite:
