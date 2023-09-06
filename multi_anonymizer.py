@@ -384,7 +384,7 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
                         .values({selector.column: bindparam('new_value')})
                     )
                     connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
-                    print(f'replacing {selector.column}: {original_value} with {anonymized_value}')
+                    # print(f'replacing {selector.column}: {original_value} with {anonymized_value}')
 
         connection.commit()
     
@@ -604,5 +604,5 @@ if __name__ == '__main__':
 
         total_counter += counter
         end_time = time.process_time()
-        print(f'Anonymized {total_counter} values in {(end_time - start_time):.{2}}s')
+        print(f'Anonymized {total_counter} values in {(end_time - start_time):.2f}s')
 
