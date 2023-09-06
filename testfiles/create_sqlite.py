@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS people (
     last_name TEXT,
     age INTEGER,
     email TEXT,
-    json TEXT,
+    json_data TEXT
 );
 '''
 cursor.execute(create_table_query)
@@ -40,15 +40,15 @@ for _ in range(10):  # Adjust the number of entries you want to add
     email = fake.word() + '@example.com'
     json_obj = {
         "person": {
-            "lastname": last_name,
             "firstname": first_name,
+            "lastname": last_name,
             "age": age,
             "email": email,
         }
     }
     json_string_pretty = json.dumps(json_obj, indent=4)
     
-    insert_query = "INSERT INTO people (first_name, last_name, age, email, json) VALUES (?, ?, ?, ?, ?)"
+    insert_query = "INSERT INTO people (first_name, last_name, age, email, json_data) VALUES (?, ?, ?, ?, ?)"
     cursor.execute(insert_query, (first_name, last_name, age, email, json_string_pretty))
 
 # insert a null values as a valid test case

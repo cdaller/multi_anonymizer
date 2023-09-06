@@ -15,6 +15,7 @@ License: Apache License 2.0
 
 from typing import List, Dict
 
+import copy
 import argparse
 import csv
 import os.path
@@ -296,16 +297,15 @@ def anonymize_json(source_file_name, target_file_name, selectors: List[Selector]
     with open(source_file_name, 'r', encoding=encoding) as file:
         data = json.load(file)
 
-    counter = anonymize_json_string(data, selectors)
+    [data, counter] = anonymize_json_obj(data, selectors)
 
     with open(target_file_name, 'w', encoding=encoding) as file:
         json.dump(data, file, indent=4, ensure_ascii=False)
 
     return counter
 
-def anonymize_json_string(data: str, selectors: List[Selector]) -> int:
+def anonymize_json_obj(data: Dict, selectors: List[Selector], context: Dict[str, str] = {}) -> [str, int]:
     counter = 0
-    context = {}
     for selector in selectors:
 
         if selector.jsonpath is None:
@@ -321,7 +321,7 @@ def anonymize_json_string(data: str, selectors: List[Selector]) -> int:
             anonymized_value = str(anonymize_value(selector, original_value, context)) 
             match.full_path.update(data, anonymized_value)
             counter += 1
-    return counter
+    return [data, counter]
 
 
 def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
@@ -351,6 +351,7 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
             columns_to_select.append(selector.column)
 
         # Convert column names to actual table columns
+        columns_to_select = list(dict.fromkeys(columns_to_select).keys()) # remove duplicates
         selected_columns = [getattr(table.c, col_name) for col_name in columns_to_select]
 
         select_stmt = select(*selected_columns)
@@ -358,12 +359,22 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
 
         # Iterate over the rows and anonymize the value
         for row in result:
+            cloned_row = copy.deepcopy(dict(row._mapping)) # make it mutable for multiple changes of the same column
             context = {}
             for selector in selectors:
-                original_value = row._mapping[selector.column]
+                original_value = cloned_row[selector.column]
                 if original_value != None:
-                    anonymized_value = str(anonymize_value(selector, original_value, context))
+                    if selector.jsonpath is not None:
+                        # interprete the value as json and do the replacement in the json:
+                        data = json.loads(original_value)
+                        [anonymized_data, json_counter] = anonymize_json_obj(data, [selector], context)
+                        anonymized_value = json.dumps(anonymized_data, indent=4, ensure_ascii=False)
+                        counter += json_counter
+                    else:
+                        anonymized_value = str(anonymize_value(selector, original_value, context))
+                        counter += 1
                     
+                    cloned_row[selector.column] = anonymized_value
                     update_stmt = (
                         update(table)
                         .where(table.c[selector.column] == bindparam('orig_value'))
@@ -371,7 +382,6 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
                     )
                     connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
                     print(f'replacing {selector.column}: {original_value} with {anonymized_value}')
-                    counter += 1
 
         connection.commit()
     
@@ -387,7 +397,7 @@ def create_faker_dict(selector: Selector) -> {}:
         fake_dict = defaultdict(FAKER.first_name)
     if data_type == 'last_name':
         fake_dict = defaultdict(FAKER.last_name)
-    if data_type.startswith('number'):
+    if data_type == 'number':
         fake_dict = defaultdict(getRandomInt(selector.min, selector.max))
     if data_type == 'email':
         fake_dict = defaultdict(FAKER.email)

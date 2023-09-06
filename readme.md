@@ -248,6 +248,19 @@ Note: for MSSql you need to install the odbc driver (on Linux/Mac) and then pass
 
 The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor problems on MSSql!
 
+#### Anonymize JSON in database
+
+The example databse has also a field that contains the personal information as a json text. The following execution anonymized the columns for first and last name as well as the appropriate fields in the json that is stored in the db as well:
+
+```bash
+./multi_anonymizer.py \
+  --input \
+      "sqlite:///testfiles/my_database.db:(type=first_name,table=people,column=first_name)" \
+      "sqlite:///testfiles/my_database.db:(type=last_name,table=people,column=last_name)" \
+      "sqlite:///testfiles/my_database.db:(type=first_name,table=people,column=json_data,jsonpath=$.person.firstname,template={{first_name}})" \
+      "sqlite:///testfiles/my_database.db:(type=last_name,table=people,column=json_data,jsonpath=$.person.lastname,template={{last_name}})"
+```
+
 ### Templates
 
 The anonymized value can be modified by using a jinja2 template. The default template (if no other is given) is ```{{ __value__ }}```. Using the template mechanism the anonymized values can be modified. 
