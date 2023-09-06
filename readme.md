@@ -304,5 +304,5 @@ and to Benjamin Bengfort for inspiration
 
 * [x] number start/end
 * [ ] delete column
-* [ ] set fixed value in column
+* [x] set fixed value in column - use a template without a variable for this!
 * [x] create person dict from id (like person_id), then use firstname, lastname, etc. of this person in columns
