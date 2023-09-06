@@ -27,7 +27,7 @@ import time
 # from unidecode import unidecode
 
 import glob2 as glob
-from jinja2 import Template, Environment, FileSystemLoader
+from jinja2 import Environment
 from faker import Factory
 
 try:

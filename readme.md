@@ -80,6 +80,10 @@ pip3 install glob2
 pip3 install jinja2
 # optional, only needed when you want to parse xml files:
 pip3 install lxml
+# optional, only needed when you want to anonymize values stored in relational databases
+pip3 install sqlalchemy
+# optional, only needed when you want to anonymize values in json files
+pip3 install jsonpath-ng
 ```
 
 Might need to do with sudo:
@@ -90,6 +94,10 @@ sudo -H pip3 install glob2
 sudo -H pip3 install jinja2
 # optional, only needed when you want to parse xml files:
 sudo -H pip3 install lxml
+# optional, only needed when you want to anonymize values stored in relational databases
+sudo -H pip3 install sqlalchemy
+# optional, only needed when you want to anonymize values in json files
+sudo -H pip3 install jsonpath-ng
 ```
 
 ## Examples
@@ -122,7 +130,6 @@ Anonymize the person id in all files, first and last name in persons file
           "testfiles/persons.csv:(input_type=csv,type=first_name,column=1)" \
           "testfiles/persons.csv:(input_type=csv,type=last_name,column=2)"
 
-# new syntax
 # As the filename does not end in 'csv', 'input_type' is also needed!
 ./multi_anonymizer.py --header-lines 1 --overwrite \
   --input "testfiles/persons.csv_anonymized:(input_type=csv,type=first_name,column=1)" \
