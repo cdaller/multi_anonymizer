@@ -289,13 +289,16 @@ An example: If you have a table of columns ```first_name```, ```last_name```, ``
 
 For csv file column indices, use ```col_<index>``` (like ```col_1```, etc.) as a reference in the templates(Jinja2 does not recognize numbers as variables names).
 
+Use the type ```dummy``` if you do not need anonymization but plan to replace the value by a constant or by other values using the template mechanism.
+
 
 ```bash
 ./multi_anonymizer.py --header-lines 1 \
+  --encoding UTF-8 \
   --input \
     "testfiles/persons.csv:(type=first_name,column=1)" \
     "testfiles/persons.csv:(type=last_name,column=2)" \
-    "testfiles/persons.csv:(type=name,column=3,template={{col_1|unidecode|lower}}.{{col_2|unidecode|lower}}@example.com)"
+    "testfiles/persons.csv:(type=dummy,column=3,template={{col_1|unidecode|lower}}.{{col_2|unidecode|lower}}@example.com)"
 
 ./multi_anonymizer.py \
   --input \

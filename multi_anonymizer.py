@@ -374,7 +374,10 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
                         anonymized_value = str(anonymize_value(selector, original_value, context))
                         counter += 1
                     
+                    # update anonymized value in row dict:
                     cloned_row[selector.column] = anonymized_value
+
+                    # udpate in db (FIXME: not very efficient to execute update for every column separately!)
                     update_stmt = (
                         update(table)
                         .where(table.c[selector.column] == bindparam('orig_value'))
@@ -387,6 +390,8 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
     
     return counter
 
+def dummy_value():
+    return 'dummy'
 
 def create_faker_dict(selector: Selector) -> {}:
     # Create mappings of names & emails to faked names & emails.
@@ -427,6 +432,8 @@ def create_faker_dict(selector: Selector) -> {}:
         fake_dict = defaultdict(FAKER.uuid4)
     if data_type == 'company':
         fake_dict = defaultdict(FAKER.company)
+    if data_type == 'dummy':
+        fake_dict = defaultdict(dummy_value)
 
     return fake_dict
 
