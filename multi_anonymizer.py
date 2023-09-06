@@ -88,7 +88,8 @@ class Selector:
         self.input_type = None
         self.table = None
         self.column = None
-        self.path = None
+        self.xpath = None
+        self.jsonpath = None
         self.template = '{{__value__}}'
         self.min = 0
         self.max = 1000000
@@ -98,12 +99,14 @@ class Selector:
         base_string = f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', "
         if self.input_type == 'csv':
             base_string = base_string + f"column='{self.column}'"
-        elif self.input_type == 'xml' or self.input_type == 'json':
-            base_string = base_string + f"path='{self.path}'"
+        elif self.input_type == 'xml':
+            base_string = base_string + f"path='{self.xpath}'"
+        elif self.input_type == 'json':
+            base_string = base_string + f"path='{self.jsonpath}'"
         elif self.input_type == 'db':
             base_string = base_string + f"table='{self.table}', column='{self.column}'"
         else:
-            base_string = base_string + f"table='{self.table}', column='{self.column}', path='{self.path}'"
+            base_string = base_string + f"table='{self.table}', column='{self.column}', xpath='{self.xpath}', jsonpath='{self.jsonpath}'"
         if self.template is not None:
             base_string = base_string + f", template='{self.template}'"
         return base_string + ']'
@@ -124,7 +127,8 @@ class Selector:
             self.data_type = attributes.get('type', self.data_type)
             self.table = attributes.get('table', self.table)
             self.column = attributes.get('column', self.column)
-            self.path = attributes.get('path', self.path)
+            self.xpath = attributes.get('xpath', self.xpath)
+            self.jsonpath = attributes.get('jsonpath', self.jsonpath)
             self.input_type = attributes.get('input-type', self.input_type)
             self.template = attributes.get('template', self.template)
             self.min = int(attributes.get('min', self.min))
@@ -137,7 +141,7 @@ class Selector:
                 self.column = input_string
             else:
                 self.input_type = 'xml'
-                self.path = input_string
+                self.xpath = input_string
 
 class Source:
     def __init__(self, name, sub_source):
@@ -174,8 +178,10 @@ def anonymize_value(selector: Selector, original_value, context: Dict[str, str] 
             context["col_" + selector.column] = anonymized_value
         else:
             context[selector.column] = anonymized_value
-    if selector.path is not None:
-        context[selector.path] = anonymized_value    
+    if selector.xpath is not None:
+        context[selector.xpath] = anonymized_value    
+    if selector.jsonpath is not None:
+        context[selector.jsonpath] = anonymized_value    
 
     return jinja_template.render(context)
 
@@ -252,11 +258,11 @@ def anonymize_xml(source_file_name, target_file_name, selectors: List[Selector],
     context = {}
     for selector in selectors:
 
-        if selector.path is None:
-            print(f'No path given in selector {selector}')
+        if selector.xpath is None:
+            print(f'No xpath given in selector {selector}')
             sys.exit(3)
 
-        selector_parts = selector.path.split('/@')
+        selector_parts = selector.xpath.split('/@')
         element_selector = selector_parts[0]
         attribute_name = None
         if len(selector_parts) > 1:
@@ -290,15 +296,23 @@ def anonymize_json(source_file_name, target_file_name, selectors: List[Selector]
     with open(source_file_name, 'r', encoding=encoding) as file:
         data = json.load(file)
 
+    counter = anonymize_json_string(data, selectors)
+
+    with open(target_file_name, 'w', encoding=encoding) as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
+
+    return counter
+
+def anonymize_json_string(data: str, selectors: List[Selector]) -> int:
     counter = 0
     context = {}
     for selector in selectors:
 
-        if selector.path is None:
-            print(f'No path given in selector {selector}')
+        if selector.jsonpath is None:
+            print(f'No jsonpath given in selector {selector}')
             sys.exit(3)
 
-        jsonpath_expression = parse(selector.path)
+        jsonpath_expression = parse(selector.jsonpath)
 
         matches = [match.value for match in jsonpath_expression.find(data)]
 
@@ -307,13 +321,8 @@ def anonymize_json(source_file_name, target_file_name, selectors: List[Selector]
             anonymized_value = str(anonymize_value(selector, original_value, context)) 
             match.full_path.update(data, anonymized_value)
             counter += 1
-
-    with open(target_file_name, 'w', encoding=encoding) as file:
-        json.dump(data, file, indent=4, ensure_ascii=False)
-
     return counter
 
-def anonymize_json_string(data, selectors: List[Selector])
 
 def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
 

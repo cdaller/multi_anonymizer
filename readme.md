@@ -191,8 +191,8 @@ NOTE: Colons in xpath expressions need to be escaped by a double colon to allow 
 # new syntax allows to anonymize two different properties at once (needs --overwrite)!
 ./multi_anonymizer.py --overwrite \
   --namespace adr=https://github.com/cdaller/csv_anonymizer/addressbook  \
-  --input "testfiles/addresses_ns.xml:(type=last_name,path=./adr::person/lastname)" \
-          "testfiles/addresses_ns.xml:(type=first_name,path=./adr::person/firstname)"
+  --input "testfiles/addresses_ns.xml:(type=last_name,xpath=./adr::person/lastname)" \
+          "testfiles/addresses_ns.xml:(type=first_name,xpath=./adr::person/firstname)"
 
 ```
 
@@ -210,8 +210,7 @@ pip install jsonpath-ng
 
 ```bash
 ./multi_anonymizer.py --encoding UTF-8 \
-  --input "testfiles/addresses.json:(type=last_name,path=$.addressbook.person[*].lastname)"
-
+  --input "testfiles/addresses.json:(type=last_name,jsonpath=$.addressbook.person[*].lastname)"
 ```
 
 ### Database
@@ -249,17 +248,34 @@ Note: for MSSql you need to install the odbc driver (on Linux/Mac) and then pass
 
 The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor problems on MSSql!
 
-### Multiple anonymized values and templates
+### Templates
 
-If you have a table of columns ```first_name```, ```last_name```, ```email``` and the content of column ```email``` needs to be in sync with the first and last name, you can use the template feature which also allows some string modifications like upper-, lowercasing. The templating is done by jinja2.
+The anonymized value can be modified by using a jinja2 template. The default template (if no other is given) is ```{{ __value__ }}```. Using the template mechanism the anonymized values can be modified. 
 
-The special variables ```__value__``` and ```___original_value___``` can also be used in the templates. ```___value___``` is the anonymized value and this is also the default template if no other is given.
+Some examples:
 
-Apart from that, all column names that were used **before** can be used. The replacement works in the order of the given input arguments. So you cannot access the value of a column of an input selector that is defined after the current input selector!
+* ```{{ __value__ | upper }}```: uppercases the anonymized value
+* ```{{ __value__ | lower}}@example.org```: lowercases the anonymized value and creates an email address from it
+* ```{{ __value__ }} (anonymized)```: add the text "(anonymized)" to every value
+* ```{{ __value__ }} ({{ __original_value__ }})```: add the original value in brackets (does not make real sense, if you want anonymization, but you never know)
 
-For csv file column indices, use ```col_<index>``` (like ```col_1```, etc.) as a reference in the templates. Jinja2 does not recognize numbers as variables names.
+```bash
+# use template to modify anonmized data
+./multi_anonymizer.py --header-lines 1 \
+  --input "testfiles/persons.csv:(input_type=csv,type=first_name,column=1)" \
+          "testfiles/persons.csv:(input_type=csv,type=last_name,column=2,template={{ __value__ }} ({{ __original_value__ }}) )"
+```
 
-Templates that use other values will also not work when using xpath expressions on xml files, as there is no "row-context" possible.
+But there is more you can do with templates:
+
+You can also access previously replaced values by their anonymization type.
+
+All column names that were used **before** can be used. The replacement works in the order of the given input arguments. So you cannot access the value of a column of an input selector that is defined after the current input selector!
+
+An example: If you have a table of columns ```first_name```, ```last_name```, ```email``` and the content of column ```email``` needs to be in sync with the first and last name.
+
+For csv file column indices, use ```col_<index>``` (like ```col_1```, etc.) as a reference in the templates(Jinja2 does not recognize numbers as variables names).
+
 
 ```bash
 ./multi_anonymizer.py --header-lines 1 \
@@ -271,11 +287,12 @@ Templates that use other values will also not work when using xpath expressions 
 ./multi_anonymizer.py \
   --input \
     "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=people,column=last_name)" \
-    "sqlite:///testfiles/my_database.db:(input_type=db,type=first_name,table=people,column=first_name,template={{__value__|lower}})" \
+    "sqlite:///testfiles/my_database.db:(input_type=db,type=first_name,table=people,column=first_name)" \
     "sqlite:///testfiles/my_database.db:(input_type=db,type=email,table=people,column=email,template={{first_name|unidecode|lower}}.{{last_name|unidecode|lower}}@example.com)" \
     "sqlite:///testfiles/my_database.db:(input_type=db,type=number,min=18,max=60,table=people,column=age)"
-
 ```
+
+Templates that use other values will also not work when using xpath expressions on xml files, as there is no "row-context" possible.
 
 ## Thanks
 
@@ -285,7 +302,7 @@ and to Benjamin Bengfort for inspiration
 
 ## TODO
 
-  * number start/end
-  * delete column
-  * set fixed value in column
-  * create person dict from id (like person_id), then use firstname, lastname, etc. of this person in columns
+* [x] number start/end
+* [ ] delete column
+* [ ] set fixed value in column
+* [x] create person dict from id (like person_id), then use firstname, lastname, etc. of this person in columns
