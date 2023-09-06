@@ -318,9 +318,10 @@ def anonymize_json_obj(data: Dict, selectors: List[Selector], context: Dict[str,
 
         for match in jsonpath_expression.find(data):
             original_value = match.value
-            anonymized_value = str(anonymize_value(selector, original_value, context)) 
-            match.full_path.update(data, anonymized_value)
-            counter += 1
+            if original_value is not None:
+                anonymized_value = str(anonymize_value(selector, original_value, context)) 
+                match.full_path.update(data, anonymized_value)
+                counter += 1
     return [data, counter]
 
 

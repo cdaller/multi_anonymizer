@@ -52,6 +52,10 @@
                         }
                     }
                 ]
+            },
+            {
+                "lastname": "Grossbank GmbH",
+                "firstname": null
             }
         ]
     }
