@@ -23,6 +23,7 @@ import random
 import shutil
 import sys
 import re
+import numbers
 from collections import defaultdict
 import time
 # from unidecode import unidecode
@@ -61,7 +62,7 @@ def parse_args():
                              "inputfile1:./xpath-selector/@attribute_name for xml\n"
                              "sqlite://[username:password@]server/database:tablename/columnname for database content\n"
                              "use multiple arguments to anonymize a value in multiple files!\n"
-                             "Mixing of different types (csv, xml, ...) also works!\n"
+                             "Mixing of different types (csv, xml, json, ...) also works!\n"
                              "Wildcards like '*' or '?' in filenames will also work!")
     parser.add_argument('-t', '--type', dest='type', default='number',
                         help='name, first_name, last_name, email, zip, city, address, number, ... . Default is number')
@@ -167,9 +168,11 @@ def get_fake_dict(selector: Selector):
         fake_dict = create_faker_dict(selector)
         FAKER_DICTS[selector.data_type] = fake_dict
     return fake_dict
-    
+
+
 def anonymize_value(selector: Selector, original_value, context: Dict[str, str] = {}):
-    anonymized_value = get_fake_dict(selector)[original_value]
+    # empty values should stay empty:
+    anonymized_value = get_fake_dict(selector)[original_value] if isinstance(original_value, numbers.Number) or len(original_value) > 0 else ''
     
     jinja_template = template_env.from_string(selector.template)
     context['__value__'] = anonymized_value
@@ -182,7 +185,18 @@ def anonymize_value(selector: Selector, original_value, context: Dict[str, str] 
     if selector.xpath is not None:
         context[selector.xpath] = anonymized_value    
     if selector.jsonpath is not None:
-        context[selector.jsonpath] = anonymized_value    
+        context[selector.jsonpath] = anonymized_value
+
+    # Extracts values enclosed between "{{" and "}}" respecting "|".
+    pattern = pattern = re.compile(r'\{\{(.*?)(?:\||\}\})')
+    value_types = pattern.findall(selector.template)
+    for type in value_types:
+        type = type.strip()
+        if not type.startswith('__') and not type.endswith('__'):
+            # add a anonymized string for the type to the context ('{{city}}' will add an anonymized value to for 'city' in context)
+            # print(f'add faker for {type}')
+            tmp_selector = Selector(f'(type={type})')
+            context[type] = get_fake_dict(tmp_selector)[original_value]
 
     return jinja_template.render(context)
 
@@ -396,6 +410,7 @@ def dummy_value():
 
 def create_faker_dict(selector: Selector) -> {}:
     # Create mappings of names & emails to faked names & emails.
+    fake_dict = None
     data_type = selector.data_type
     if data_type == 'name':
         fake_dict = defaultdict(FAKER.name)
@@ -417,6 +432,8 @@ def create_faker_dict(selector: Selector) -> {}:
         fake_dict = defaultdict(FAKER.city)
     if data_type == 'street':
         fake_dict = defaultdict(FAKER.street_address)
+    if data_type == 'street_name':
+        fake_dict = defaultdict(FAKER.street_name)
     if data_type == 'street_address':
         fake_dict = defaultdict(FAKER.street_address)
     if data_type == 'iban':

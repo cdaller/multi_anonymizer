@@ -271,7 +271,9 @@ pip install jsonpath-ng
 
 ```bash
 ./multi_anonymizer.py --encoding UTF-8 \
-  --input "testfiles/addresses.json:(type=last_name,jsonpath=$.addressbook.person[*].lastname)"
+  --input \
+  "testfiles/addresses.json:(type=last_name,jsonpath=$.addressbook.person[*].lastname,template={{__value__|upper }})" \
+  "testfiles/addresses.json:(type=first_name,jsonpath=$.addressbook.person[*].firstname)"
 ```
 
 ### Database
@@ -291,9 +293,12 @@ Please note that for database anonymization, the anonymized values always replac
 # create test database:
 testfiles/create_sqlite.py testfiles/my_database.db
 
+# show content of db:
+sqlite3 testfiles/my_database.db "select * from people"
+
 # anonymize name column in table people
 ./multi_anonymizer.py \
-  --input "sqlite:///testfiles/my_database.db:(input_type=db,type=name,table=people,column=name)"
+  --input "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=people,column=last_name)"
 
 # anonymize age column using a min/max age  
 ./multi_anonymizer.py \
@@ -319,7 +324,7 @@ The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor
 
 #### Anonymize JSON in database
 
-The example databse has also a field that contains the personal information as a json text. The following execution anonymized the columns for first and last name as well as the appropriate fields in the json that is stored in the db as well:
+The example database has also a field that contains the personal information as a json text. The following execution anonymized the columns for first and last name as well as the appropriate fields in the json that is stored in the db as well:
 
 ```bash
 ./multi_anonymizer.py \
@@ -377,7 +382,16 @@ Use the type ```dummy``` if you do not need anonymization but plan to replace th
     "sqlite:///testfiles/my_database.db:(input_type=db,type=number,min=18,max=60,table=people,column=age)"
 ```
 
-Templates that use other values will also not work when using xpath expressions on xml files, as there is no "row-context" possible.
+Templates may also reference anonymization types (like 'city' or 'zip'). In this case, the templates may be used to combine two anonymized values into one json property. In JSON or XML you still cannot reference previously replaced values (as there is no row context available), but you can consistently replace values that are combined from multiple values into one value. 
+
+The example below shows how to anonymize a json property that holds zip and city consistently across the file:
+
+```bash
+./multi_anonymizer.py \
+  --encoding UTF-8 \
+  --input \
+  "testfiles/addresses_simple.json:(type=dummy,jsonpath=$.addressbook.person[*].address[*].zipcity,template={{zip}} {{city|upper}})"
+```
 
 ## Thanks
 
@@ -391,3 +405,4 @@ and to Benjamin Bengfort for inspiration
 * [ ] delete column
 * [x] set fixed value in column - use a template without a variable for this!
 * [x] create person dict from id (like person_id), then use firstname, lastname, etc. of this person in columns
+* [x] use faker dictionaries in templates to anonymize fields like "zip city" or "firstname lastname" 
