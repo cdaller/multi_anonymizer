@@ -162,31 +162,31 @@ Anonymize the person id in all files, first and last name in persons file
 ./multi_anonymizer.py --header-lines 1 --type number \
   --input testfiles/persons.csv:0 testfiles/addresses.csv:1
 
-# new selector syntax:
+# new selector syntax (to be preferred over the old syntax!):
 ./multi_anonymizer.py --header-lines 1 \
   --input "testfiles/persons.csv:(type=number,column=0)" "testfiles/addresses.csv:(type=number,column=1)"
 
-./multi_anonymizer.py --header-lines 1  --overwrite --type first_name \
-  --input testfiles/persons.csv_anonymized:1
+./multi_anonymizer.py --header-lines 1  --overwrite \
+  --input "testfiles/persons.csv_anonymized:(type=first_name,column=1)"
 
-./multi_anonymizer.py --header-lines 1 --overwrite --type last_name \
-  --input testfiles/persons.csv_anonymized:2
+./multi_anonymizer.py --header-lines 1 --overwrite \
+  --input "testfiles/persons.csv_anonymized:(type=last_name,column=2)"
 
-# or all at once using the new syntax:
+# or all at once (only possible using the new syntax):
 ./multi_anonymizer.py --header-lines 1 \
   --input "testfiles/persons.csv:(type=number,column=0)" \
           "testfiles/addresses.csv:(type=number,column=1)" \
           "testfiles/persons.csv:(type=first_name,column=1)" \
           "testfiles/persons.csv:(type=last_name,column=2)"
 
-# As the filename does not end in 'csv', 'input_type' is also needed!
+# When the filename does not end in 'csv', 'input_type' is also needed:
 ./multi_anonymizer.py --header-lines 1 --overwrite \
   --input "testfiles/persons.csv_anonymized:(input_type=csv,type=first_name,column=1)" \
           "testfiles/persons.csv_anonymized:(input_type=csv,type=last_name,column=2)"
 
 # support wildcards in file paths (even recursive directories) - need quotes for wildcards to be passed to script:
-./multi_anonymizer.py --header-lines 1 --overwrite --type last_name \
-  --input "testfiles/**/?erson*s.csv_anonymized:2"
+./multi_anonymizer.py --header-lines 1 --overwrite  \
+  --input "testfiles/**/?erson*s.csv_anonymized:(type=last_name,column=2)"
 ```
 
 ### XML
@@ -204,7 +204,7 @@ Anonymize element and attribute values in xml files. Use xpath for selection of 
 ./multi_anonymizer.py --type last_name \
   --input testfiles/addresses.xml:./person/lastname
 
-# new syntax
+# new syntax (to be preferred!)
 ./multi_anonymizer.py \
   --input "testfiles/addresses.xml:(type=last_name,xpath=./person/lastname)"
 
@@ -335,6 +335,24 @@ The example database has also a field that contains the personal information as 
       "sqlite:///testfiles/my_database.db:(type=last_name,table=people,column=json_data,jsonpath=$.person.lastname,template={{last_name}})"
 ```
 
+### Regular Expressions
+
+Using a regular expression (regex) can also be used to determine the part of the string that should be anonymized.
+The given regexp must match the whole string. The ```group(1)``` of the regexp is then anonymized.
+
+This example uses a csv file holding first and last name in one cell. There are two selectors, first one matching the first name as a regular expression group, the second selector matches the last name.
+
+If the regexp does not match, the selector is not executed which might result in non-anonymized data! There will be warning in case this happens.
+
+```bash
+./multi_anonymizer.py \
+  --header-lines 1 \
+  --encoding UTF-8 \
+  --input \
+    "testfiles/persons_regexp.csv:(input_type=csv,type=first_name,column=1,regexp=(\\w*)\\s\\w*)" \
+    "testfiles/persons_regexp.csv:(input_type=csv,type=last_name,column=1,regexp=\\w*\\s(\\w*))"
+```
+
 ### Templates
 
 The anonymized value can be modified by using a jinja2 template. The default template (if no other is given) is ```{{ __value__ }}```. Using the template mechanism the anonymized values can be modified. 
@@ -405,4 +423,5 @@ and to Benjamin Bengfort for inspiration
 * [ ] delete column
 * [x] set fixed value in column - use a template without a variable for this!
 * [x] create person dict from id (like person_id), then use firstname, lastname, etc. of this person in columns
-* [x] use faker dictionaries in templates to anonymize fields like "zip city" or "firstname lastname" 
+* [x] use faker dictionaries in templates to anonymize fields like "zip city" or "firstname lastname"
+* [x] allow regular expressions to match/replace values (#5)

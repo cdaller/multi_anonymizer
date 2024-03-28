@@ -57,13 +57,13 @@ FAKER_DICTS = {}
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Anonymize columns of one ore more csv files', formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('-i', '--input', nargs='+', dest='input',
-                        help="inputfile1:columnindex1 [inputfile2:columnindex2] for csv or \n"
-                             "inputfile1:./xpath-selector/@attribute_name for xml\n"
-                             "sqlite://[username:password@]server/database:tablename/columnname for database content\n"
+    parser.add_argument('-i', '--input', nargs='+', action='extend', dest='input',
+                        help="inputfile1:(type=number,column=0) [inputfile2:(type=number,column=0)] for csv or \n"
+                             "inputfile1:(type=last_name,xpath=./person/lastname) for xml\n"
+                             "sqlite://[username:password@]server/database:(input_type=db,type=first_name,table=people,column=first_name) for database content\n"
                              "use multiple arguments to anonymize a value in multiple files!\n"
-                             "Mixing of different types (csv, xml, json, ...) also works!\n"
-                             "Wildcards like '*' or '?' in filenames will also work!")
+                             "Mixing of different types (csv, xml, json, ...) and wildcards like '*' or '?' in filenames will also work!\n"
+                             "For more examples see readme.md")
     parser.add_argument('-t', '--type', dest='type', default='number',
                         help='name, first_name, last_name, email, zip, city, address, number, ... . Default is number')
     parser.add_argument('-e', '--encoding', dest='encoding', default='ISO-8859-15',
@@ -92,6 +92,7 @@ class Selector:
         self.column = None
         self.xpath = None
         self.jsonpath = None
+        self.regexp = None
         self.template = '{{__value__}}'
         self.min = 0
         self.max = 1000000
@@ -108,7 +109,7 @@ class Selector:
         elif self.input_type == 'db':
             base_string = base_string + f"table='{self.table}', column='{self.column}'"
         else:
-            base_string = base_string + f"table='{self.table}', column='{self.column}', xpath='{self.xpath}', jsonpath='{self.jsonpath}'"
+            base_string = base_string + f"table='{self.table}', column='{self.column}', xpath='{self.xpath}', jsonpath='{self.jsonpath}', regexp='{self.regexp}'"
         if self.template is not None:
             base_string = base_string + f", template='{self.template}'"
         return base_string + ']'
@@ -119,7 +120,7 @@ class Selector:
             sys.exit(4)
 
         if input_string.startswith('(') and input_string.endswith(')'):
-            input_parts = input_string.strip("()").split(',')
+            input_parts = input_string[1:-1].split(',') # remove brackets and split
 
             attributes = {}
             for part in input_parts:
@@ -131,6 +132,7 @@ class Selector:
             self.column = attributes.get('column', self.column)
             self.xpath = attributes.get('xpath', self.xpath)
             self.jsonpath = attributes.get('jsonpath', self.jsonpath)
+            self.regexp = attributes.get('regexp', self.regexp)
             self.input_type = attributes.get('input-type', self.input_type)
             self.template = attributes.get('template', self.template)
             self.min = int(attributes.get('min', self.min))
@@ -170,9 +172,38 @@ def get_fake_dict(selector: Selector):
     return fake_dict
 
 
+def search_and_replace_dynamic(input_string: str, pattern: str, replacement: str) -> str:
+    """
+    The input string is matched against the given pattern. The group(1) is then replaced.
+    If the pattern did not match, the input string is returned.
+    """
+    p = re.compile(pattern)
+    m = p.match(input_string)
+    if m is None:
+        print(f"WARN: Regexp does not match inputstring '{input_string}' - no change!")
+        return input_string
+    
+    found = m.group(1)
+    start_pos = m.start(1)
+    return f"{input_string[:m.start(1)]}{replacement}{input_string[m.end(1):]}"
+
 def anonymize_value(selector: Selector, original_value, context: Dict[str, str] = {}):
+
+    isNumber = isinstance(original_value, numbers.Number)
+    value_to_anonymize = original_value
+
+    if not isNumber and selector.regexp is not None:
+        pattern = re.compile(selector.regexp)
+        match = pattern.match(value_to_anonymize)
+        if match is not None:
+            value_to_anonymize = match.group(1)
+
     # empty values should stay empty:
-    anonymized_value = get_fake_dict(selector)[original_value] if isinstance(original_value, numbers.Number) or len(original_value) > 0 else ''
+    anonymized_value = get_fake_dict(selector)[value_to_anonymize] if isNumber or len(original_value) > 0 else ''
+
+    if not isNumber and selector.regexp is not None:
+        anonymized_value = search_and_replace_dynamic(original_value, selector.regexp, anonymized_value)
+
     
     jinja_template = template_env.from_string(selector.template)
     context['__value__'] = anonymized_value
@@ -187,7 +218,7 @@ def anonymize_value(selector: Selector, original_value, context: Dict[str, str] 
     if selector.jsonpath is not None:
         context[selector.jsonpath] = anonymized_value
 
-    # Extracts values enclosed between "{{" and "}}" respecting "|".
+    # Extracts values enclosed between "{{" and "}}" as new anonymization types:
     pattern = pattern = re.compile(r'\{\{(.*?)(?:\||\}\})')
     value_types = pattern.findall(selector.template)
     for type in value_types:
