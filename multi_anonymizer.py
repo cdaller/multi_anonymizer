@@ -199,7 +199,7 @@ def anonymize_value(selector: Selector, original_value, context: Dict[str, str] 
             value_to_anonymize = match.group(1)
 
     # empty values should stay empty:
-    anonymized_value = get_fake_dict(selector)[value_to_anonymize] if isNumber or len(original_value) > 0 else ''
+    anonymized_value = get_fake_dict(selector)[value_to_anonymize] if not None or isNumber or len(original_value) > 0 else ''
 
     if not isNumber and selector.regexp is not None:
         anonymized_value = search_and_replace_dynamic(original_value, selector.regexp, anonymized_value)
