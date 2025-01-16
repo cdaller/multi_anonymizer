@@ -47,6 +47,8 @@ pip install lxml
 pip install sqlalchemy
 # optional, only needed when you want to anonymize values in json files
 pip install jsonpath-ng
+# optional, only needed when sql server via pyodbc is used:
+pip install pyodbc
 ```
 
 Might need to do with sudo:
@@ -61,6 +63,8 @@ sudo -H pip install lxml
 sudo -H pip install sqlalchemy
 # optional, only needed when you want to anonymize values in json files
 sudo -H pip install jsonpath-ng
+# optional, only needed when sql server via pyodbc is used:
+sudo -H pip install pyodbc
 ```
 
 ## Usage
@@ -300,24 +304,30 @@ sqlite3 testfiles/my_database.db "select * from people"
 ./multi_anonymizer.py \
   --input "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=people,column=last_name)"
 
-# anonymize age column using a min/max age  
+# anonymize age column using a min/max age
 ./multi_anonymizer.py \
   --input "sqlite:///testfiles/my_database.db:(type=number,min=18,max=48,table=people,column=age)"
+
+# anonymize the last name but only for limited set of rows using a where clause
+./multi_anonymizer.py \
+  --input "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=people,column=last_name,where=id>30)" \
 
 # all at once (for a consistent anonymization of email addresses matching the names, see template example below!)
 ./multi_anonymizer.py \
   --input \
-    "sqlite:///testfiles/my_database.db:(input_type=db,type=first_name,table=people,column=first_name)" \
-    "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=people,column=last_name)" \
-    "sqlite:///testfiles/my_database.db:(input_type=db,type=email,table=people,column=email)" \
-    "sqlite:///testfiles/my_database.db:(type=number,min=18,max=48,table=people,column=age)"
+    "sqlite:///testfiles/my_database.db:(input_type=db, type=first_name, table=people, column=first_name)" \
+    "sqlite:///testfiles/my_database.db:(input_type=db, type=last_name, table=people, column=last_name)" \
+    "sqlite:///testfiles/my_database.db:(input_type=db, type=email, table=people, column=email)" \
+    "sqlite:///testfiles/my_database.db:(type=number, min=18, max=48, table=people, column=age)"
 ```
+
+If the table is not located in the default database schema, the parameter "schema" is used to define the schema! (see the MSSql example below)
 
 Note: for MSSql you need to install the odbc driver (on Linux/Mac) and then pass the parameters url-encoded as odbc_connect query parameter:
 
 ```bash
 ./multi_anonymizer.py --type word \
-  --input "mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dliferay-db%3BUID%3Dsa%3BPWD%3Dxxxx%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes:(input_type=db,table=User_,column=screenName)"
+  --input "mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dliferay-db%3BUID%3Dsa%3BPWD%3Dxxxx%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes:(input_type=db, schemeschema=dbo, table=User_, column=screenName)"
 ```
 
 The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor problems on MSSql!
