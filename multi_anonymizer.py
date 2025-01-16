@@ -39,7 +39,7 @@ except ImportError:
     xml_available = False
 
 try:
-    from sqlalchemy import create_engine, select, update, MetaData, Table, bindparam
+    from sqlalchemy import create_engine, select, update, MetaData, Table, bindparam, text
     sql_available = True
 except ImportError:
     sql_available = False
@@ -91,6 +91,7 @@ class Selector:
         self.schema = None
         self.table = None
         self.column = None
+        self.where = None
         self.xpath = None
         self.jsonpath = None
         self.regexp = None
@@ -102,7 +103,9 @@ class Selector:
     def __str__(self):
         base_string = f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', "
         if self.schema:
-            base_string = base_string + f"scgema='{self.schema}', "
+            base_string = base_string + f"schema='{self.schema}', "
+        if self.where:
+            base_string = base_string + f"where='{self.where}', "
 
         if self.input_type == 'csv':
             base_string = base_string + f"column='{self.column}'"
@@ -128,13 +131,14 @@ class Selector:
 
             attributes = {}
             for part in input_parts:
-                key, value = part.strip().split('=')
+                key, value = part.strip().split('=', 1)
                 attributes[key] = value
 
             self.data_type = attributes.get('type', self.data_type)
             self.schema = attributes.get('schema', self.schema)
             self.table = attributes.get('table', self.table)
             self.column = attributes.get('column', self.column)
+            self.where = attributes.get('where', self.where)
             self.xpath = attributes.get('xpath', self.xpath)
             self.jsonpath = attributes.get('jsonpath', self.jsonpath)
             self.regexp = attributes.get('regexp', self.regexp)
@@ -406,6 +410,9 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
         selected_columns = [getattr(table.c, col_name) for col_name in columns_to_select]
 
         select_stmt = select(*selected_columns)
+        if selectors[0].where:
+            # print(f"add where clause '{selectors[0].where}'")
+            select_stmt = select_stmt.where(text(selectors[0].where))
         result = connection.execute(select_stmt)
 
         # Iterate over the rows and anonymize the value
@@ -428,12 +435,16 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
                     # update anonymized value in row dict:
                     cloned_row[selector.column] = anonymized_value
 
-                    # udpate in db (FIXME: not very efficient to execute update for every column separately!)
+                    # update in db (FIXME: not very efficient to execute update for every column separately!)
                     update_stmt = (
                         update(table)
                         .where(table.c[selector.column] == bindparam('orig_value'))
                         .values({selector.column: bindparam('new_value')})
                     )
+                    if selectors[0].where:
+                        # print(f"add where clause to update'{selectors[0].where}'")
+                        update_stmt = update_stmt.where(text(selectors[0].where))
+
                     connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
                     # print(f'replacing {selector.column}: {original_value} with {anonymized_value}')
 
