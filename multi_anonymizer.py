@@ -88,6 +88,7 @@ class Selector:
     def __init__(self, input_string, legacy_data_type = None):
         self.data_type = legacy_data_type
         self.input_type = None
+        self.schema = None
         self.table = None
         self.column = None
         self.xpath = None
@@ -100,6 +101,9 @@ class Selector:
     
     def __str__(self):
         base_string = f"Selector[data_type='{self.data_type}', input_type='{self.input_type}', "
+        if self.schema:
+            base_string = base_string + f"scgema='{self.schema}', "
+
         if self.input_type == 'csv':
             base_string = base_string + f"column='{self.column}'"
         elif self.input_type == 'xml':
@@ -128,6 +132,7 @@ class Selector:
                 attributes[key] = value
 
             self.data_type = attributes.get('type', self.data_type)
+            self.schema = attributes.get('schema', self.schema)
             self.table = attributes.get('table', self.table)
             self.column = attributes.get('column', self.column)
             self.xpath = attributes.get('xpath', self.xpath)
@@ -385,7 +390,7 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
 
         # all selectors operate on the same table
         metadata = MetaData()
-        table = Table(selectors[0].table, metadata, autoload_with = engine)
+        table = Table(selectors[0].table, metadata, autoload_with = engine, schema=selectors[0].schema)
 
         columns_to_select = []
         for selector in selectors:
