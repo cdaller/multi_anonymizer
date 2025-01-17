@@ -20,8 +20,8 @@ cursor = conn.cursor()
 
 # Create the 'people' table
 create_table_query = '''
-CREATE TABLE IF NOT EXISTS people (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS persons (
+    id INTEGER PRIMARY KEY,
     first_name TEXT,
     last_name TEXT,
     age INTEGER,
@@ -32,8 +32,21 @@ CREATE TABLE IF NOT EXISTS people (
 cursor.execute(create_table_query)
 conn.commit()
 
+create_table_query = '''
+CREATE TABLE IF NOT EXISTS emails (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id INTEGER,
+    subject TEXT,
+    email TEXT
+);
+'''
+cursor.execute(create_table_query)
+conn.commit()
+
+email_id = 1000
+
 # Generate and insert fake names into the 'people' table
-for _ in range(10):  # Adjust the number of entries you want to add
+for person_id in range(1000, 1010):  # Adjust the number of entries you want to add
     first_name = fake.first_name()
     last_name = fake.last_name()
     age = fake.random_int(min=18, max=99)
@@ -48,17 +61,21 @@ for _ in range(10):  # Adjust the number of entries you want to add
     }
     json_string_pretty = json.dumps(json_obj, indent=4)
     
-    insert_query = "INSERT INTO people (first_name, last_name, age, email, json_data) VALUES (?, ?, ?, ?, ?)"
-    cursor.execute(insert_query, (first_name, last_name, age, email, json_string_pretty))
+    insert_query = "INSERT INTO persons (id, first_name, last_name, age, email, json_data) VALUES (?, ?, ?, ?, ?, ?)"
+    cursor.execute(insert_query, (person_id, first_name, last_name, age, email, json_string_pretty))
+
+    # add an email for every person
+    insert_query = "INSERT INTO emails (person_id, subject, email) VALUES (?, ?, ?)"
+    cursor.execute(insert_query, (person_id, f'Hello {first_name} {last_name}', email))
 
 # insert a null values as a valid test case
-insert_query = "INSERT INTO people (first_name, last_name, age) VALUES (?, ?, ?)"
+insert_query = "INSERT INTO persons (first_name, last_name, age) VALUES (?, ?, ?)"
 cursor.execute(insert_query, (None, None, 21))
-insert_query = "INSERT INTO people (first_name, last_name, age) VALUES (?, ?, ?)"
+insert_query = "INSERT INTO persons (first_name, last_name, age) VALUES (?, ?, ?)"
 cursor.execute(insert_query, ('Charles', 'No Age', None))
 conn.commit()
 
 # Close the database connection
 conn.close()
 
-print("Database table 'people' created and filled with fake names")
+print("Database table 'persons' created and filled with fake names")
