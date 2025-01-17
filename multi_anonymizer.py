@@ -56,7 +56,7 @@ FAKER_DICTS = {}
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Anonymize columns of one ore more csv files', formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(description='Anonymize columns of one ore more csv/xml/json files or database columns', formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-i', '--input', nargs='+', action='extend', dest='input',
                         help="inputfile1:(type=number,column=0) [inputfile2:(type=number,column=0)] for csv or \n"
                              "inputfile1:(type=last_name,xpath=./person/lastname) for xml\n"
@@ -379,11 +379,16 @@ def anonymize_json_obj(data: Dict, selectors: List[Selector], context: Dict[str,
     return [data, counter]
 
 
-def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
+def anonymize_db(connection_string, selectors: List[Selector], encoding) -> int:
 
     if not sql_available:
         print('for database processing, the library "sqlalchemy" (and possible some drivers) are needed - please install with pip!')
         sys.exit(2)
+
+    for selector in selectors:
+        if selector.table is None:
+            print(f'No table given in selector {selector}')
+            sys.exit(3)
 
     engine = create_engine(connection_string, echo = False)
 
@@ -398,11 +403,6 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
 
         columns_to_select = []
         for selector in selectors:
-
-            if selector.table is None:
-                print(f'No table given in selector {selector}')
-                sys.exit(3)
-
             columns_to_select.append(selector.column)
 
         # Convert column names to actual table columns
@@ -415,7 +415,7 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
             select_stmt = select_stmt.where(text(selectors[0].where))
         result = connection.execute(select_stmt)
 
-        # Iterate over the rows and anonymize the value
+        # Iterate over the rows and anonymize the values
         for row in result:
             cloned_row = copy.deepcopy(dict(row._mapping)) # make it mutable for multiple changes of the same column
             context = {}
@@ -441,9 +441,9 @@ def anonymize_db(connection_string, selector: List[Selector], encoding) -> int:
                         .where(table.c[selector.column] == bindparam('orig_value'))
                         .values({selector.column: bindparam('new_value')})
                     )
-                    if selectors[0].where:
+                    if selector.where:
                         # print(f"add where clause to update'{selectors[0].where}'")
-                        update_stmt = update_stmt.where(text(selectors[0].where))
+                        update_stmt = update_stmt.where(text(selector.where))
 
                     connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
                     # print(f'replacing {selector.column}: {original_value} with {anonymized_value}')
@@ -607,9 +607,9 @@ if __name__ == '__main__':
 
             # collect all collectors for a given source:
             source = Source(source_name, None)
-            # database sources are only one source, if the operate on the same table:
+            # database sources are only one source, if they operate on the same table:
             if (selector.input_type == "db"):
-                source.sub_source = selector.table
+                source.sub_source = f'{selector.schema}.{selector.table}'
 
             if source not in source_selector_map.keys():
                 source_selector_map[source] = []

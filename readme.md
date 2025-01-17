@@ -298,30 +298,42 @@ Please note that for database anonymization, the anonymized values always replac
 testfiles/create_sqlite.py testfiles/my_database.db
 
 # show content of db:
-sqlite3 testfiles/my_database.db "select * from people"
+sqlite3 testfiles/my_database.db "select * from persons"
 
-# anonymize name column in table people
+# anonymize name column in table persons
 ./multi_anonymizer.py \
-  --input "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=people,column=last_name)"
+  --input "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=persons,column=last_name)"
 
 # anonymize age column using a min/max age
 ./multi_anonymizer.py \
-  --input "sqlite:///testfiles/my_database.db:(type=number,min=18,max=48,table=people,column=age)"
+  --input "sqlite:///testfiles/my_database.db:(type=number,min=18,max=48,table=persons,column=age)"
 
 # anonymize the last name but only for limited set of rows using a where clause
 ./multi_anonymizer.py \
-  --input "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=people,column=last_name,where=id>30)" \
+  --input "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=persons,column=last_name,where=id>30)" \
 
 # all at once (for a consistent anonymization of email addresses matching the names, see template example below!)
 ./multi_anonymizer.py \
   --input \
-    "sqlite:///testfiles/my_database.db:(input_type=db, type=first_name, table=people, column=first_name)" \
-    "sqlite:///testfiles/my_database.db:(input_type=db, type=last_name, table=people, column=last_name)" \
-    "sqlite:///testfiles/my_database.db:(input_type=db, type=email, table=people, column=email)" \
-    "sqlite:///testfiles/my_database.db:(type=number, min=18, max=48, table=people, column=age)"
+    "sqlite:///testfiles/my_database.db:(input_type=db, type=first_name, table=persons, column=first_name)" \
+    "sqlite:///testfiles/my_database.db:(input_type=db, type=last_name, table=persons, column=last_name)" \
+    "sqlite:///testfiles/my_database.db:(input_type=db, type=email, table=persons, column=email)" \
+    "sqlite:///testfiles/my_database.db:(type=number, min=18, max=48, table=persons, column=age)"
 ```
 
 If the table is not located in the default database schema, the parameter "schema" is used to define the schema! (see the MSSql example below)
+
+#### Anonymize Data in Multiple Database Tables
+
+```bash
+./multi_anonymizer.py \
+  --input \
+    "sqlite:///testfiles/my_database.db:(input_type=db, type=email, table=persons, column=email)" \
+    "sqlite:///testfiles/my_database.db:(input_type=db, type=email, table=emails, column=email)"
+```
+
+
+#### Microsoft Sql Server
 
 Note: for MSSql you need to install the odbc driver (on Linux/Mac) and then pass the parameters url-encoded as odbc_connect query parameter:
 
@@ -339,10 +351,10 @@ The example database has also a field that contains the personal information as 
 ```bash
 ./multi_anonymizer.py \
   --input \
-      "sqlite:///testfiles/my_database.db:(type=first_name,table=people,column=first_name)" \
-      "sqlite:///testfiles/my_database.db:(type=last_name,table=people,column=last_name)" \
-      "sqlite:///testfiles/my_database.db:(type=first_name,table=people,column=json_data,jsonpath=$.person.firstname,template={{first_name}})" \
-      "sqlite:///testfiles/my_database.db:(type=last_name,table=people,column=json_data,jsonpath=$.person.lastname,template={{last_name}})"
+      "sqlite:///testfiles/my_database.db:(type=first_name,table=persons,column=first_name)" \
+      "sqlite:///testfiles/my_database.db:(type=last_name,table=persons,column=last_name)" \
+      "sqlite:///testfiles/my_database.db:(type=first_name,table=persons,column=json_data,jsonpath=$.person.firstname,template={{first_name}})" \
+      "sqlite:///testfiles/my_database.db:(type=last_name,table=persons,column=json_data,jsonpath=$.person.lastname,template={{last_name}})"
 ```
 
 ### Regular Expressions
@@ -404,10 +416,10 @@ Use the type ```dummy``` if you do not need anonymization but plan to replace th
 
 ./multi_anonymizer.py \
   --input \
-    "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=people,column=last_name)" \
-    "sqlite:///testfiles/my_database.db:(input_type=db,type=first_name,table=people,column=first_name)" \
-    "sqlite:///testfiles/my_database.db:(input_type=db,type=dummy,table=people,column=email,template={{first_name|unidecode|lower}}.{{last_name|unidecode|lower}}@example.com)" \
-    "sqlite:///testfiles/my_database.db:(input_type=db,type=number,min=18,max=60,table=people,column=age)"
+    "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=persons,column=last_name)" \
+    "sqlite:///testfiles/my_database.db:(input_type=db,type=first_name,table=persons,column=first_name)" \
+    "sqlite:///testfiles/my_database.db:(input_type=db,type=dummy,table=persons,column=email,template={{first_name|unidecode|lower}}.{{last_name|unidecode|lower}}@example.com)" \
+    "sqlite:///testfiles/my_database.db:(input_type=db,type=number,min=18,max=60,table=persons,column=age)"
 ```
 
 Templates may also reference anonymization types (like 'city' or 'zip'). In this case, the templates may be used to combine two anonymized values into one json property. In JSON or XML you still cannot reference previously replaced values (as there is no row context available), but you can consistently replace values that are combined from multiple values into one value. 
