@@ -30,7 +30,7 @@ import time
 
 import glob2 as glob
 from jinja2 import Environment
-from faker import Factory
+from faker import Factory, Faker
 
 try:
     from lxml import etree
@@ -455,51 +455,38 @@ def anonymize_db(connection_string, selectors: List[Selector], encoding) -> int:
 def dummy_value():
     return 'dummy'
 
+def get_faker_type_map(selector: Selector) -> Dict:
+    return {
+        'name': FAKER.name,
+        'first_name': FAKER.first_name,
+        'last_name': FAKER.last_name,
+        'number': getRandomInt(selector.min, selector.max),
+        'email': FAKER.email,
+        'phone_number': FAKER.phone_number,
+        'zip': FAKER.postcode,
+        'postcode': FAKER.postcode,
+        'city': FAKER.city,
+        'street': FAKER.street_address,
+        'street_name': FAKER.street_name,
+        'iban': FAKER.iban,
+        'sentence': FAKER.sentence,
+        'word': FAKER.word,
+        'text': FAKER.text,
+        'date': FAKER.date,
+        'uuid4': FAKER.uuid4,
+        'company': FAKER.company,
+        'dummy': dummy_value,
+    }
+
 def create_faker_dict(selector: Selector) -> {}:
+    FAKER_TYPE_MAP = get_faker_type_map(selector)
+
     # Create mappings of names & emails to faked names & emails.
     fake_dict = None
     data_type = selector.data_type
-    if data_type == 'name':
-        fake_dict = defaultdict(FAKER.name)
-    if data_type == 'first_name':
-        fake_dict = defaultdict(FAKER.first_name)
-    if data_type == 'last_name':
-        fake_dict = defaultdict(FAKER.last_name)
-    if data_type == 'number':
-        fake_dict = defaultdict(getRandomInt(selector.min, selector.max))
-    if data_type == 'email':
-        fake_dict = defaultdict(FAKER.email)
-    if data_type == 'phone_number':
-        fake_dict = defaultdict(FAKER.phone_number)
-    if data_type == 'zip':
-        fake_dict = defaultdict(FAKER.postcode)
-    if data_type == 'postcode':
-        fake_dict = defaultdict(FAKER.postcode)
-    if data_type == 'city':
-        fake_dict = defaultdict(FAKER.city)
-    if data_type == 'street':
-        fake_dict = defaultdict(FAKER.street_address)
-    if data_type == 'street_name':
-        fake_dict = defaultdict(FAKER.street_name)
-    if data_type == 'street_address':
-        fake_dict = defaultdict(FAKER.street_address)
-    if data_type == 'iban':
-        fake_dict = defaultdict(FAKER.iban)
-    if data_type == 'sentence':
-        fake_dict = defaultdict(FAKER.sentence)
-    if data_type == 'word':
-        fake_dict = defaultdict(FAKER.word)
-    if data_type == 'text':
-        fake_dict = defaultdict(FAKER.text)
-    if data_type == 'date':
-        fake_dict = defaultdict(FAKER.date)
-    if data_type == 'uuid4':
-        fake_dict = defaultdict(FAKER.uuid4)
-    if data_type == 'company':
-        fake_dict = defaultdict(FAKER.company)
-    if data_type == 'dummy':
-        fake_dict = defaultdict(dummy_value)
 
+    if data_type in FAKER_TYPE_MAP.keys():
+        fake_dict = defaultdict(FAKER_TYPE_MAP[data_type])
     return fake_dict
 
 def find_rightmost_colon(input_string):
@@ -615,6 +602,14 @@ if __name__ == '__main__':
                 source_selector_map[source] = []
 
             source_selector_map[source].append(selector)
+
+            # fail fast for invalid data types:
+            faker_type_map = get_faker_type_map(selector)
+            if selector.data_type not in faker_type_map.keys():
+                print(f'Invalid faker data type "{selector.data_type}" used in selector "{selector}"')            
+                valid_faker_types = ', '.join([f"'{str(i)}'" for i in faker_type_map.keys()])
+                print(f'Valid faker types are: {valid_faker_types}')
+                sys.exit(4)
 
     # now process all files and apply all selectors to each value to anonymize:
     print('All anonymizations:')
