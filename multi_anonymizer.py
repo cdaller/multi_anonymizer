@@ -247,8 +247,7 @@ def getRandomInt(start: int = 0, end: int = 1000000):
 
 def anonymize_rows(rows, selectors: List[Selector]):
     """
-    Rows is an iterable of dictionaries that contain name and
-    email fields that need to be anonymized.
+    Rows is an iterable of dictionaries that contain fields that need to be anonymized.
     """
 
     # Iterate over the rows and yield anonymized rows.
@@ -401,56 +400,94 @@ def anonymize_db(connection_string, selectors: List[Selector], encoding) -> int:
         metadata = MetaData()
         table = Table(selectors[0].table, metadata, autoload_with = engine, schema=selectors[0].schema)
 
-        columns_to_select = []
         for selector in selectors:
-            columns_to_select.append(selector.column)
+            column = getattr(table.c, selector.column)
 
-        # Convert column names to actual table columns
-        columns_to_select = list(dict.fromkeys(columns_to_select).keys()) # remove duplicates
-        selected_columns = [getattr(table.c, col_name) for col_name in columns_to_select]
+            select_stmt = select(column).distinct()
+            if selector.where:
+                print(f"add where clause '{selector.where}'")
+                select_stmt = select_stmt.where(text(selector.where))
 
-        select_stmt = select(*selected_columns)
-        if selectors[0].where:
-            # print(f"add where clause '{selectors[0].where}'")
-            select_stmt = select_stmt.where(text(selectors[0].where))
-        result = connection.execute(select_stmt)
+            # Select all distinct values in the column
+            distinct_values = connection.execute(select_stmt).scalars().all()
 
-        # Iterate over the rows and anonymize the values
-        for row in result:
-            cloned_row = copy.deepcopy(dict(row._mapping)) # make it mutable for multiple changes of the same column
-            context = {}
-            for selector in selectors:
-                original_value = cloned_row[selector.column]
-                if original_value != None:
-                    if selector.jsonpath is not None:
-                        # interprete the value as json and do the replacement in the json:
-                        data = json.loads(original_value)
-                        [anonymized_data, json_counter] = anonymize_json_obj(data, [selector], context)
-                        anonymized_value = json.dumps(anonymized_data, indent=4, ensure_ascii=False)
-                        counter += json_counter
-                    else:
-                        anonymized_value = str(anonymize_value(selector, original_value, context))
-                        counter += 1
-                    
-                    # update anonymized value in row dict:
-                    cloned_row[selector.column] = anonymized_value
+            # Generate anonymized values
+            anonymized_map = {}
+            for original_value in distinct_values:
+                anonymized_value = str(anonymize_value(selector, original_value))
+                anonymized_map[original_value] = anonymized_value
 
-                    # update in db (FIXME: not very efficient to execute update for every column separately!)
-                    update_stmt = (
+            # Update table with anonymized values
+            for original_value, anonymized_value in anonymized_map.items():
+                update_stmt = (
                         update(table)
                         .where(table.c[selector.column] == bindparam('orig_value'))
                         .values({selector.column: bindparam('new_value')})
                     )
-                    if selector.where:
-                        # print(f"add where clause to update'{selectors[0].where}'")
-                        update_stmt = update_stmt.where(text(selector.where))
+                if selector.where:
+                    print(f"add where clause to update'{selectors[0].where}'")
+                    update_stmt = update_stmt.where(text(selector.where))
 
-                    connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
-                    # print(f'replacing {selector.column}: {original_value} with {anonymized_value}')
+                connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
+                print(f'replacing {selector.column}: {original_value} with {anonymized_value}')
+                counter += 1
 
-        connection.commit()
+            connection.commit()
     
     return counter
+
+
+    #     columns_to_select = []
+    #     for selector in selectors:
+    #         columns_to_select.append(selector.column)
+
+    #     # Convert column names to actual table columns
+    #     columns_to_select = list(dict.fromkeys(columns_to_select).keys()) # remove duplicates
+    #     selected_columns = [getattr(table.c, col_name) for col_name in columns_to_select]
+
+    #     select_stmt = select(*selected_columns)
+    #     if selectors[0].where:
+    #         # print(f"add where clause '{selectors[0].where}'")
+    #         select_stmt = select_stmt.where(text(selectors[0].where))
+    #     result = connection.execute(select_stmt)
+
+    #     anonymized_values = {}
+    #     # Iterate over the rows and anonymize the values
+    #     for row in result:
+    #         cloned_row = copy.deepcopy(dict(row._mapping)) # make it mutable for multiple changes of the same column
+    #         context = {}
+    #         for selector in selectors:
+    #             original_value = cloned_row[selector.column]
+    #             if original_value != None:
+    #                 if selector.jsonpath is not None:
+    #                     # interprete the value as json and do the replacement in the json:
+    #                     data = json.loads(original_value)
+    #                     [anonymized_data, json_counter] = anonymize_json_obj(data, [selector], context)
+    #                     anonymized_value = json.dumps(anonymized_data, indent=4, ensure_ascii=False)
+    #                     counter += json_counter
+    #                 else:
+    #                     anonymized_value = str(anonymize_value(selector, original_value, context))
+    #                     counter += 1
+                    
+    #                 # update anonymized value in row dict:
+    #                 cloned_row[selector.column] = anonymized_value
+
+    #                 # update in db (FIXME: not very efficient to execute update for every column separately!)
+    #                 update_stmt = (
+    #                     update(table)
+    #                     .where(table.c[selector.column] == bindparam('orig_value'))
+    #                     .values({selector.column: bindparam('new_value')})
+    #                 )
+    #                 if selector.where:
+    #                     # print(f"add where clause to update'{selectors[0].where}'")
+    #                     update_stmt = update_stmt.where(text(selector.where))
+
+    #                 connection.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
+    #                 # print(f'replacing {selector.column}: {original_value} with {anonymized_value}')
+
+    #     connection.commit()
+    
+    # return counter
 
 def dummy_value():
     return 'dummy'
