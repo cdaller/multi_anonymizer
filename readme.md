@@ -424,7 +424,12 @@ Use the type ```dummy``` if you do not need anonymization but plan to replace th
     "testfiles/persons.csv:(type=first_name,column=1)" \
     "testfiles/persons.csv:(type=last_name,column=2)" \
     "testfiles/persons.csv:(type=dummy,column=3,template={{col_1|unidecode|lower}}.{{col_2|unidecode|lower}}@example.com)"
+```
 
+As database anonymization unfortunately does not have a row context it is not possible to replace for example an email address consistently using the first/last name in another column of the table. The following command will anonymize first name, last name and the email address, but the email address will have different first/last names than the `first_name`/`last_name` columns.
+
+
+```bash
 ./multi_anonymizer.py \
   --input \
     "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=persons,column=last_name)" \
@@ -433,7 +438,9 @@ Use the type ```dummy``` if you do not need anonymization but plan to replace th
     "sqlite:///testfiles/my_database.db:(input_type=db,type=number,min=18,max=60,table=persons,column=age)"
 ```
 
-Templates may also reference anonymization types (like 'city' or 'zip'). In this case, the templates may be used to combine two anonymized values into one json property. In JSON or XML you cannot reference previously replaced values (as there is no row context available), but you can consistently replace values that are combined from multiple values into one value. 
+If the email addresses were composed by `firstName.lastName@example.com` one could extract the first/last name using a regular expression, which would then be anonymized by the same values. But I leave this example for the user to try...
+
+Templates may also reference anonymization types (like 'city' or 'zip'). In this case, the templates may be used to combine two anonymized values into one (json) property. In JSON or XML you cannot reference previously replaced values (as there is no row context available), but you can consistently replace values that are combined from multiple values into one value. 
 
 The example below shows how to anonymize a json property that holds zip and city consistently across the file:
 

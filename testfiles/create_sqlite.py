@@ -45,7 +45,7 @@ conn.commit()
 
 email_id = 1000
 
-# Generate and insert fake names into the 'people' table
+# Generate and insert fake names into the 'persons' table
 for person_id in range(1000, 1010):  # Adjust the number of entries you want to add
     first_name = fake.first_name()
     last_name = fake.last_name()
