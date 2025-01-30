@@ -460,10 +460,11 @@ and to Benjamin Bengfort for inspiration
 ## TODO
 
 * [x] number start/end
-* [ ] delete column
+* [ ] delete column in output csv file
 * [x] set fixed value in column - use a template without a variable for this!
 * [x] create person dict from id (like person_id), then use firstname, lastname, etc. of this person in columns
 * [x] use faker dictionaries in templates to anonymize fields like "zip city" or "firstname lastname"
 * [x] allow regular expressions to match/replace values (#5)
 * [x] add anonymization in databases
-* [ ] add anonymization of json in database values
+* [x] add anonymization of json in database values
+* [ ] add joins for db anonymzation (in combination with where clauses)
