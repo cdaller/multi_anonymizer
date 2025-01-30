@@ -208,7 +208,7 @@ def anonymize_value(selector: Selector, original_value, context: Dict[str, str] 
             value_to_anonymize = match.group(1)
 
     # empty values should stay empty:
-    anonymized_value = get_fake_dict(selector)[value_to_anonymize] if isNumber or len(original_value) > 0 else ''
+    anonymized_value = get_fake_dict(selector)[value_to_anonymize] if isNumber or (original_value is not None and len(original_value)) > 0 else ''
 
     if not isNumber and selector.regexp is not None:
         anonymized_value = search_and_replace_dynamic(original_value, selector.regexp, anonymized_value)
@@ -228,7 +228,7 @@ def anonymize_value(selector: Selector, original_value, context: Dict[str, str] 
         context[selector.jsonpath] = anonymized_value
 
     # Extracts values enclosed between "{{" and "}}" as new anonymization types:
-    pattern = pattern = re.compile(r'\{\{(.*?)(?:\||\}\})')
+    pattern = re.compile(r'\{\{(.*?)(?:\||\}\})')
     value_types = pattern.findall(selector.template)
     for type in value_types:
         type = type.strip()
@@ -414,7 +414,17 @@ def anonymize_db(connection_string, selectors: List[Selector], encoding) -> int:
             # Generate anonymized values
             anonymized_map = {}
             for original_value in distinct_values:
-                anonymized_value = str(anonymize_value(selector, original_value))
+                context = {}
+                if original_value is not None and selector.jsonpath is not None:
+                    # interprete the value as json and do the replacement in the json:
+                    data = json.loads(original_value)
+                    [anonymized_data, json_counter] = anonymize_json_obj(data, [selector], context)
+                    anonymized_value = json.dumps(anonymized_data, indent=4, ensure_ascii=False)
+                    counter += json_counter
+                else:
+                    anonymized_value = str(anonymize_value(selector, original_value, context))
+                    counter += 1
+
                 anonymized_map[original_value] = anonymized_value
 
             # Update table with anonymized values
