@@ -346,15 +346,26 @@ The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor
 
 #### Anonymize JSON in database
 
-The example database has also a field that contains the personal information as a json text. The following execution anonymized the columns for first and last name as well as the appropriate fields in the json that is stored in the db as well:
+The example database has also a field that contains the personal information as a json text. The following execution anonymized the columns for first and last name as well as the appropriate fields in the json that is stored in the db as well. Please note that all values of the same type are anonymized with the same value across one execution. So the first name in the database column `first_name` and the field in the json will be replaced by the same anonymized first name value (if they have the same original value!)
 
 ```bash
 ./multi_anonymizer.py \
   --input \
       "sqlite:///testfiles/my_database.db:(type=first_name,table=persons,column=first_name)" \
       "sqlite:///testfiles/my_database.db:(type=last_name,table=persons,column=last_name)" \
-      "sqlite:///testfiles/my_database.db:(type=first_name,table=persons,column=json_data,jsonpath=$.person.firstname,template={{first_name}})" \
-      "sqlite:///testfiles/my_database.db:(type=last_name,table=persons,column=json_data,jsonpath=$.person.lastname,template={{last_name}})"
+      "sqlite:///testfiles/my_database.db:(type=first_name,table=persons,column=json_data,jsonpath=$.person.firstname)" \
+      "sqlite:///testfiles/my_database.db:(type=last_name,table=persons,column=json_data,jsonpath=$.person.lastname)"
+```
+
+If for example the value in the json should be a modified version of the value in the database column, you can use templates to modify the values before setting them (see "Templates" for more details below!).
+
+```bash
+./multi_anonymizer.py \
+  --input \
+      "sqlite:///testfiles/my_database.db:(type=first_name,table=persons,column=first_name)" \
+      "sqlite:///testfiles/my_database.db:(type=last_name,table=persons,column=last_name)" \
+      "sqlite:///testfiles/my_database.db:(type=first_name,table=persons,column=json_data,jsonpath=$.person.firstname,template={{ __value__ | upper }})" \
+      "sqlite:///testfiles/my_database.db:(type=last_name,table=persons,column=json_data,jsonpath=$.person.lastname,template={{ __value__ | upper }})"
 ```
 
 ### Regular Expressions
@@ -401,7 +412,7 @@ All column names that were used **before** can be used. The replacement works in
 
 An example: If you have a table of columns ```first_name```, ```last_name```, ```email``` and the content of column ```email``` needs to be in sync with the first and last name.
 
-For csv file column indices, use ```col_<index>``` (like ```col_1```, etc.) as a reference in the templates(Jinja2 does not recognize numbers as variables names).
+For csv file column indices, use ```col_<index>``` (like ```col_1```, etc.) as a reference in the templates (Jinja2 does not recognize numbers as variables names).
 
 Use the type ```dummy``` if you do not need anonymization but plan to replace the value by a constant or by other values using the template mechanism.
 
@@ -422,7 +433,7 @@ Use the type ```dummy``` if you do not need anonymization but plan to replace th
     "sqlite:///testfiles/my_database.db:(input_type=db,type=number,min=18,max=60,table=persons,column=age)"
 ```
 
-Templates may also reference anonymization types (like 'city' or 'zip'). In this case, the templates may be used to combine two anonymized values into one json property. In JSON or XML you still cannot reference previously replaced values (as there is no row context available), but you can consistently replace values that are combined from multiple values into one value. 
+Templates may also reference anonymization types (like 'city' or 'zip'). In this case, the templates may be used to combine two anonymized values into one json property. In JSON or XML you cannot reference previously replaced values (as there is no row context available), but you can consistently replace values that are combined from multiple values into one value. 
 
 The example below shows how to anonymize a json property that holds zip and city consistently across the file:
 
@@ -447,3 +458,5 @@ and to Benjamin Bengfort for inspiration
 * [x] create person dict from id (like person_id), then use firstname, lastname, etc. of this person in columns
 * [x] use faker dictionaries in templates to anonymize fields like "zip city" or "firstname lastname"
 * [x] allow regular expressions to match/replace values (#5)
+* [x] add anonymization in databases
+* [ ] add anonymization of json in database values
