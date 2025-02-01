@@ -29,9 +29,9 @@ except ImportError:
 
 
 class DataAnonymizer:
-    def __init__(self, db_url=None):
-        """Initialize the anonymizer with a database connection (if provided)."""
-        self.fake = Faker()
+    def __init__(self, db_url=None, locale="en_US"):
+        """Initialize the anonymizer with a database connection (if provided) and set Faker locale."""
+        self.fake = Faker(locale)
         self.faker_methods = self._get_faker_methods()
         self.engine = None
 
@@ -131,11 +131,13 @@ class DataAnonymizer:
 def main():
     parser = argparse.ArgumentParser(description="Anonymize CSV, JSON, XML files, and database tables.")
     parser.add_argument("--config", nargs="+", help="JSON configurations as command-line arguments.", required=True)
+    parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
 
     args = parser.parse_args()
+    
     for config_str in args.config:
         config = json.loads(config_str)
-        anonymizer = DataAnonymizer(config.get("db_url"))
+        anonymizer = DataAnonymizer(config.get("db_url"), args.locale)
 
         if "file" in config:
             if config["file"].endswith(".csv"):
