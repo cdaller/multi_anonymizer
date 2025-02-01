@@ -42,7 +42,7 @@ class DataAnonymizer:
             self.session = self.Session()
 
     def _get_faker_methods(self):
-        """Fetch all available Faker methods, excluding deprecated and internal methods."""
+        """Fetch all available Faker methods, filtering out internal methods."""
         faker_methods = {}
         for method in dir(self.fake):
             if not method.startswith("_"):  # Exclude internal methods
@@ -55,51 +55,13 @@ class DataAnonymizer:
 
         return faker_methods
 
-    def anonymize_json_data(self, data, json_paths):
-        """Anonymizes JSON data using Faker and Jinja2 templates."""
-        if not json_parse:
-            print("jsonpath-ng is required for JSON anonymization. Install it with 'pip install jsonpath-ng'.")
-            return data
-
-        for json_path, faker_or_template in json_paths.items():
-            json_expr = json_parse(json_path)
-            for match in json_expr.find(data):
-                if faker_or_template in self.faker_methods:
-                    match.path.update(data, self.faker_methods[faker_or_template]())
-                else:
-                    template = Template(faker_or_template)
-                    match.path.update(data, template.render(row=match.value))
-
-        return data
-
-    def anonymize_xml_data(self, xml_string, xml_paths):
-        """Anonymizes XML data using Faker and Jinja2 templates."""
-        if not etree:
-            print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
-            return xml_string
-
-        try:
-            xml_tree = etree.fromstring(xml_string)
-        except etree.XMLSyntaxError:
-            return xml_string
-
-        for xpath, faker_or_template in xml_paths.items():
-            for elem in xml_tree.xpath(xpath):
-                if faker_or_template in self.faker_methods:
-                    elem.text = self.faker_methods[faker_or_template]()
-                else:
-                    template = Template(faker_or_template)
-                    elem.text = template.render(row={"value": elem.text})
-
-        return etree.tostring(xml_tree, encoding="utf-8").decode()
-
-    def anonymize_csv(self, file_path, columns_to_anonymize, overwrite=False):
-        """Anonymizes a CSV file using Faker and Jinja2 templates."""
+    def anonymize_csv(self, file_path, columns_to_anonymize, overwrite=False, separator=","):
+        """Anonymizes a CSV file using Faker and Jinja2 templates, supporting custom separators."""
         if not pd:
             print("Pandas is required for CSV anonymization. Install it with 'pip install pandas'.")
             return
 
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(file_path, sep=separator)
 
         for col, faker_or_template in columns_to_anonymize.items():
             if col in df.columns and faker_or_template in self.faker_methods:
@@ -111,7 +73,7 @@ class DataAnonymizer:
                 df[col] = df.apply(lambda row: template.render(row=row.to_dict()), axis=1)
 
         output_file = file_path if overwrite else file_path.replace(".csv", "_anonymized.csv")
-        df.to_csv(output_file, index=False)
+        df.to_csv(output_file, sep=separator, index=False)
         print(f"CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
     def anonymize_json_file(self, file_path, json_paths, overwrite=False):
@@ -158,16 +120,6 @@ class DataAnonymizer:
                 if col in row_dict and faker_or_template in self.faker_methods:
                     new_values[col] = self.faker_methods[faker_or_template]()
 
-            anonymized_row = {**row_dict, **new_values}
-
-            for col, json_paths in json_columns.items():
-                if col in row_dict and isinstance(row_dict[col], str):
-                    new_values[col] = json.dumps(self.anonymize_json_data(json.loads(row_dict[col]), json_paths))
-
-            for col, xml_paths in xml_columns.items():
-                if col in row_dict and isinstance(row_dict[col], str):
-                    new_values[col] = self.anonymize_xml_data(row_dict[col], xml_paths)
-
             if new_values:
                 update_stmt = update(table).where(table.c[id_column] == row_dict[id_column]).values(**new_values)
                 self.session.execute(update_stmt)
@@ -187,7 +139,12 @@ def main():
 
         if "file" in config:
             if config["file"].endswith(".csv"):
-                anonymizer.anonymize_csv(config["file"], config["columns"], config.get("overwrite", False))
+                anonymizer.anonymize_csv(
+                    config["file"],
+                    config["columns"],
+                    config.get("overwrite", False),
+                    config.get("separator", ",")  # Default separator: comma
+                )
             elif config["file"].endswith(".json"):
                 anonymizer.anonymize_json_file(config["file"], config["columns"], config.get("overwrite", False))
             elif config["file"].endswith(".xml"):
@@ -200,6 +157,7 @@ def main():
                 config.get("json_columns", {}), 
                 config.get("xml_columns", {})
             )
+
 
 if __name__ == "__main__":
     main()
