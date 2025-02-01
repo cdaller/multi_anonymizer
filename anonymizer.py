@@ -30,8 +30,8 @@ except ImportError:
 
 class DataAnonymizer:
     def __init__(self, db_url=None, locale="en_US"):
-        """Initialize the anonymizer with a database connection (if provided) and set Faker locale."""
-        self.fake = Faker(locale)
+        """Initialize the anonymizer with a database connection (if provided) and locale."""
+        self.fake = Faker(locale)  # Set Faker locale
         self.faker_methods = self._get_faker_methods()
         self.engine = None
 
@@ -134,7 +134,6 @@ def main():
     parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
 
     args = parser.parse_args()
-    
     for config_str in args.config:
         config = json.loads(config_str)
         anonymizer = DataAnonymizer(config.get("db_url"), args.locale)
