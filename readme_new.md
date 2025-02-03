@@ -193,6 +193,19 @@ python anonymizer.py \
     "columns": {
       "//person/firstname": "first_name",
       "//person/lastname": "last_name",
+      "//person/comment": "{{ faker.sentence() }}",
+      "//address/@id": {"type": "number", "params": {"min": 1000, "max": 2000}}
+    }
+  }
+'
+```
+
+```bash
+python anonymizer.py \
+  --config '
+  {
+    "file": "testfiles/persons.xml",
+    "columns": {
       "//address/@id": {"type": "number", "params": {"min": 1000, "max": 2000}}
     }
   }
@@ -263,8 +276,8 @@ python anonymizer.py \
 
 ## TODO
 
-* use faker calls in jinja2 expression (for example `{{ street }} {{ zip }} {{ town}}`)
-* random numbers, min, max
+* [x] use faker calls in jinja2 expression (for example `{{ street }} {{ zip }} {{ town}}`)
+* [x] random numbers, min, max
 * regexp
 * db
   * table schema
