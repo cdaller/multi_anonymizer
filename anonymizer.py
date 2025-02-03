@@ -29,9 +29,10 @@ except ImportError:
 
 
 class DataAnonymizer:
-    def __init__(self, db_url=None, locale="en_US"):
+    def __init__(self, db_url=None, locale="en_US", encoding="utf-8"):
         """Initialize the anonymizer with a database connection (if provided) and locale."""
         self.fake = Faker(locale)
+        self.encoding = encoding
         self.faker_methods = self._get_faker_methods()
         self.faker_cache = {}  # Cache for consistent faker values
         self.engine = None
@@ -82,7 +83,7 @@ class DataAnonymizer:
             print("Pandas is required for CSV anonymization. Install it with 'pip install pandas'.")
             return
 
-        df = pd.read_csv(file_path, sep=separator)
+        df = pd.read_csv(file_path, sep=separator, encoding=self.encoding)
 
         for col, faker_or_template in columns_to_anonymize.items():
             if col in df.columns:
@@ -101,7 +102,7 @@ class DataAnonymizer:
                     ), axis=1)
 
         output_file = file_path if overwrite else file_path.replace(".csv", "_anonymized.csv")
-        df.to_csv(output_file, sep=separator, index=False)
+        df.to_csv(output_file, sep=separator, encoding=self.encoding, index=False)
         print(f"CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
     def anonymize_json_file(self, file_path, json_paths, overwrite=False):
@@ -110,7 +111,7 @@ class DataAnonymizer:
             print("jsonpath-ng is required for JSON anonymization. Install it with 'pip install jsonpath-ng'.")
             return
 
-        with open(file_path, 'r', encoding='utf-8') as file:
+        with open(file_path, 'r', encoding=self.encoding) as file:
             data = json.load(file)
 
         for json_path, faker_or_template in json_paths.items():
@@ -124,7 +125,7 @@ class DataAnonymizer:
                     match.full_path.update(data, new_value)
 
         output_file = file_path if overwrite else file_path.replace(".json", "_anonymized.json")
-        with open(output_file, 'w', encoding='utf-8') as file:
+        with open(output_file, 'w', encoding=self.encoding) as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
 
         print(f"JSON file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
@@ -135,7 +136,7 @@ class DataAnonymizer:
             print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
             return
 
-        with open(file_path, 'r', encoding='utf-8') as file:
+        with open(file_path, 'r', encoding=self.encoding) as file:
             xml_string = file.read()
 
         try:
@@ -154,9 +155,9 @@ class DataAnonymizer:
                     template = Template(faker_or_template)
                     elem.text = template.render(faker=self.faker_proxy())
 
-        result = etree.tostring(xml_tree, pretty_print=True, encoding="utf-8").decode()
+        result = etree.tostring(xml_tree, pretty_print=True, encoding=self.encoding).decode()
         output_file = file_path if overwrite else file_path.replace(".xml", "_anonymized.xml")
-        with open(output_file, 'w', encoding='utf-8') as file:
+        with open(output_file, 'w', encoding=self.encoding) as file:
             file.write(result)
 
         print(f"XML file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
@@ -167,7 +168,7 @@ class DataAnonymizer:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
             return
 
-        engine = create_engine(db_url)
+        engine = create_engine(db_url, connect_args={"encoding": self.encoding})
         metadata = MetaData()
         metadata.reflect(bind=engine)
         table = Table(table_name, metadata, autoload_with=engine)
@@ -239,20 +240,19 @@ For further details and examples, see the readme.md file!
 
     parser.add_argument("--config", nargs="+", help="JSON configurations as command-line arguments.")
     parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
+    parser.add_argument("--encoding", type=str, default="utf-8", help="Set file/database encoding (default: utf-8)")
     parser.add_argument("--list-faker-methods", action="store_true", help="List all available Faker methods and exit.")
 
     args = parser.parse_args()
 
+    anonymizer = DataAnonymizer(locale=args.locale, encoding=args.encoding)
 
     if args.list_faker_methods:
-        anonymizer = DataAnonymizer(locale=args.locale)
         anonymizer.list_faker_methods()
 
     if not args.config:
         print("No configuration provided. Use --config or --list-faker-methods.")
         return
-
-    anonymizer = DataAnonymizer(locale=args.locale)
 
     for config_str in args.config:
         config = json.loads(config_str)
