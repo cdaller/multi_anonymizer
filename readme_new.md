@@ -228,12 +228,28 @@ python anonymizer.py \
   --config '{"db_url": "sqlite:///testfiles/my_database.db", "table": "persons", "id_column": "id", "columns": {"first_name": "first_name", "last_name": "last_name"}}'
 ```
 
+Using a where clause to filter to specific rows in the database:
+
+```bash
+# anonymize db table and json strings in the database
+python anonymizer.py \
+  --config '{
+    "db_url": "sqlite:///testfiles/my_database.db",
+    "table": "persons",
+    "id_column": "id",
+    "where": "id > 1005",
+    "columns": {"first_name": "first_name", "last_name": "last_name"}
+  }'
+```
+
+
+
 #### Json/XML Contained in Database Table Columns
 
 if a json string is contained in a database table, one can anonymize rows and json in columns at the same time:
 
 ```bash
-# anonymize db table
+# anonymize db table and json strings in the database
 python anonymizer.py \
   --config '{
     "db_url": "sqlite:///testfiles/my_database.db",

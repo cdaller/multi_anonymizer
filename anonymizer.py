@@ -22,7 +22,7 @@ except ImportError:
     etree = None
 
 try:
-    from sqlalchemy import create_engine, MetaData, Table, select, update
+    from sqlalchemy import create_engine, MetaData, Table, select, update, text
     from sqlalchemy.orm import sessionmaker
 except ImportError:
     create_engine = None
@@ -218,7 +218,7 @@ class DataAnonymizer:
 
         print(f"XML file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
-    def anonymize_db_table(self, db_url, table_name, id_column, columns_to_anonymize, json_columns=None, xml_columns=None):
+    def anonymize_db_table(self, db_url, table_name, id_column, where_clause, columns_to_anonymize, json_columns=None, xml_columns=None):
         """Anonymizes a database table, including JSON and XML inside table columns."""
         if not create_engine:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
@@ -232,6 +232,9 @@ class DataAnonymizer:
         session = Session()
 
         query = select(table)
+        # Apply WHERE clause filtering if provided
+        if where_clause:
+            query = query.where(text(where_clause))
         rows = session.execute(query).fetchall()
 
         for row in rows:
@@ -344,6 +347,7 @@ For further details and examples, see the readme.md file!
                 config["db_url"], 
                 config["table"], 
                 config["id_column"], 
+                config["where"], 
                 config.get("columns", {}),
                 config.get("json_columns", {}),
                 config.get("xml_columns", {}),
