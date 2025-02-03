@@ -111,14 +111,16 @@ class DataAnonymizer:
         print(f"CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
 
-    def anonymize_json_file(self, file_path, json_paths, overwrite=False):
-        """Anonymizes a JSON file using JSONPath."""
+    def anonymize_json_string(self, json_string, json_paths):
+        """Anonymizes a JSON string using JSONPath."""
         if not json_parse:
             print("jsonpath-ng is required for JSON anonymization. Install it with 'pip install jsonpath-ng'.")
-            return
+            return json_string
 
-        with open(file_path, 'r', encoding=self.encoding) as file:
-            data = json.load(file)
+        try:
+            data = json.loads(json_string)
+        except json.JSONDecodeError:
+            return json_string  # Return unchanged if invalid JSON
 
         for json_path, faker_or_template in json_paths.items():
             json_expr = json_parse(json_path)
@@ -134,26 +136,39 @@ class DataAnonymizer:
                     new_value = template.render(faker=self.faker_proxy())
                     match.full_path.update(data, new_value)
 
-        output_file = file_path if overwrite else file_path.replace(".json", "_anonymized.json")
-        with open(output_file, 'w', encoding=self.encoding) as file:
-            json.dump(data, file, indent=4, ensure_ascii=False)
+        return json.dumps(data, ensure_ascii=False, indent=4)  # Return anonymized JSON string
 
-        print(f"JSON file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
-    
-    def anonymize_xml_file(self, file_path, xml_paths, overwrite=False):
-        """Anonymizes an XML file using XPath for both element text and attributes."""
-        if not etree:
-            print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
+
+    def anonymize_json_file(self, file_path, json_paths, overwrite=False):
+        """Anonymizes a JSON file using JSONPath."""
+        if not json_parse:
+            print("jsonpath-ng is required for JSON anonymization. Install it with 'pip install jsonpath-ng'.")
             return
 
         with open(file_path, 'r', encoding=self.encoding) as file:
-            xml_string = file.read()
+            json_string = file.read()
+
+        anonymized_json = self.anonymize_json_string(json_string, json_paths)
+
+        output_file = file_path if overwrite else file_path.replace(".json", "_anonymized.json")
+        with open(output_file, 'w', encoding=self.encoding) as file:
+            file.write(anonymized_json)
+
+
+        print(f"JSON file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+    
+
+    def anonymize_xml_string(self, xml_string, xml_paths):
+        """Anonymizes an XML string using XPath."""
+        if not etree:
+            print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
+            return xml_string
 
         try:
             xml_tree = etree.fromstring(xml_string)
         except etree.XMLSyntaxError:
-            print(f"Invalid XML in file: {file_path}")
-            return
+            print(f"Invalid XML!")
+            return xml_string  # Return unchanged if invalid XML
 
         for xpath, faker_or_template in xml_paths.items():
             if "@" in xpath:  # If XPath targets an attribute (e.g., //address/@id)
@@ -184,19 +199,32 @@ class DataAnonymizer:
                         template = Template(faker_or_template)
                         elem.text = template.render(faker=self.faker_proxy()) if elem.text not in [None, ""] else elem.text
 
+        return etree.tostring(xml_tree, encoding=self.encoding).decode()  # ✅ Return anonymized XML string
+
+    def anonymize_xml_file(self, file_path, xml_paths, overwrite=False):
+        """Anonymizes an XML file using XPath for both element text and attributes."""
+        if not etree:
+            print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
+            return
+
+        with open(file_path, 'r', encoding=self.encoding) as file:
+            xml_string = file.read()
+
+        anonymized_xml = self.anonymize_xml_string(xml_string, xml_paths)
+
         output_file = file_path if overwrite else file_path.replace(".xml", "_anonymized.xml")
         with open(output_file, 'w', encoding=self.encoding) as file:
-            file.write(etree.tostring(xml_tree, encoding="utf-8").decode())
+            file.write(anonymized_xml)
 
         print(f"XML file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
-    def anonymize_db_table(self, db_url, table_name, id_column, columns_to_anonymize):
-        """Anonymizes a database table while ensuring consistency."""
+    def anonymize_db_table(self, db_url, table_name, id_column, columns_to_anonymize, json_columns=None, xml_columns=None):
+        """Anonymizes a database table, including JSON and XML inside table columns."""
         if not create_engine:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
             return
 
-        engine = create_engine(db_url, connect_args={"encoding": self.encoding})
+        engine = create_engine(db_url)
         metadata = MetaData()
         metadata.reflect(bind=engine)
         table = Table(table_name, metadata, autoload_with=engine)
@@ -210,6 +238,7 @@ class DataAnonymizer:
             row_dict = row._asdict()
             new_values = {}
 
+            # Standard column anonymization
             for col, faker_or_template in columns_to_anonymize.items():
                 if col in row_dict:
                     if isinstance(faker_or_template, dict) and "type" in faker_or_template:
@@ -222,6 +251,18 @@ class DataAnonymizer:
                     else:
                         template = Template(faker_or_template)
                         new_values[col] = template.render(row=row_dict, faker=self.faker_proxy())
+
+            # JSON Column Anonymization
+            if json_columns:
+                for col, json_paths in json_columns.items():
+                    if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid JSON string
+                        new_values[col] = self.anonymize_json_string(row_dict[col], json_paths)
+
+            # XML Column Anonymization
+            if xml_columns:
+                for col, xml_paths in xml_columns.items():
+                    if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid XML string
+                        new_values[col] = self.anonymize_xml_string(row_dict[col], xml_paths)
 
             if new_values:
                 update_stmt = update(table).where(table.c[id_column] == row_dict[id_column]).values(**new_values)
@@ -303,7 +344,9 @@ For further details and examples, see the readme.md file!
                 config["db_url"], 
                 config["table"], 
                 config["id_column"], 
-                config.get("columns", {})
+                config.get("columns", {}),
+                config.get("json_columns", {}),
+                config.get("xml_columns", {}),
             )
 
 if __name__ == "__main__":

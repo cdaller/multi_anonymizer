@@ -228,7 +228,9 @@ python anonymizer.py \
   --config '{"db_url": "sqlite:///testfiles/my_database.db", "table": "persons", "id_column": "id", "columns": {"first_name": "first_name", "last_name": "last_name"}}'
 ```
 
-#### Json Contained in Database Tables
+#### Json/XML Contained in Database Table Columns
+
+if a json string is contained in a database table, one can anonymize rows and json in columns at the same time:
 
 ```bash
 # anonymize db table
@@ -247,37 +249,19 @@ python anonymizer.py \
   }'
 ```
 
-```json
-{
-    "file": "testfiles/persons.csv",
-    "columns": {
-        "age": { "type": "number", "params": { "min": 20, "max": 80 } }
-    },
-    "overwrite": false
-}
-```
+## Encoding
 
-python anonymizer.py \
-  --config '{"table": "users", "id_column": "id", "json_columns": {"user_data": {"$.users[*].phone": "phone_number"}}}'
+For xml, csv and json files, use the `--encoding` command line parameter to set the encoding, the files are read and written.
 
+For database data, the encoding needs to be added to the database url. This is dependent on the database.
 
-python anonymizer.py \
-  --config '{"table": "users", "id_column": "id", "xml_columns": {"user_data": {"//user/email": "email"}}}'
-
-
-python anonymizer.py \
-  --config '{"file": "x.csv", "columns": {"firstname": "first_name", "lastname": "last_name"}}' \
-  --config '{"table": "users", "id_column": "id", "columns": {"name": "name", "email": "email"}}' \
-  --config '{"table": "users", "id_column": "id", "json_columns": {"user_data": {"$.users[*].phone": "phone_number"}}}' \
-  --config '{"table": "users", "id_column": "id", "xml_columns": {"user_data": {"//user/email": "email"}}}'
-
-
-```
+For MySql this seems to work (untested): `"mysql+pymysql://user:pass@host/test?charset=utf8mb4"`
 
 ## TODO
 
 * [x] use faker calls in jinja2 expression (for example `{{ street }} {{ zip }} {{ town}}`)
 * [x] random numbers, min, max
+* [x] json/xml in database columns
 * regexp
 * db
   * table schema
