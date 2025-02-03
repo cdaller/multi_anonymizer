@@ -113,13 +113,52 @@ class DataAnonymizer:
         rows = self.session.execute(query).fetchall()
 
         for row in rows:
-            row_dict = dict(row)
+            row_dict = row._asdict()
             new_values = {}
 
+            # Standard column anonymization
             for col, faker_or_template in columns_to_anonymize.items():
                 if col in row_dict and faker_or_template in self.faker_methods:
                     new_values[col] = self.faker_methods[faker_or_template]()
 
+            # Jinja2 templating for custom values
+            for col, faker_or_template in columns_to_anonymize.items():
+                if col in row_dict and faker_or_template not in self.faker_methods:
+                    template = Template(faker_or_template)
+                    new_values[col] = template.render(row=row_dict, faker=self.fake)
+
+            # JSON Column Anonymization
+            if json_columns and json_parse:
+                for col, json_paths in json_columns.items():
+                    if col in row_dict and isinstance(row_dict[col], str):
+                        try:
+                            json_data = json.loads(row_dict[col])
+                        except json.JSONDecodeError:
+                            continue  # Skip if not valid JSON
+
+                        for json_path, faker_or_template in json_paths.items():
+                            json_expr = json_parse(json_path)
+                            for match in json_expr.find(json_data):
+                                match.path.update(json_data, self.faker_methods.get(faker_or_template, faker_or_template)())
+
+                        new_values[col] = json.dumps(json_data)
+
+            # XML Column Anonymization
+            if xml_columns and etree:
+                for col, xml_paths in xml_columns.items():
+                    if col in row_dict and isinstance(row_dict[col], str):
+                        try:
+                            xml_tree = etree.fromstring(row_dict[col])
+                        except etree.XMLSyntaxError:
+                            continue  # Skip if not valid XML
+
+                        for xpath, faker_or_template in xml_paths.items():
+                            for elem in xml_tree.xpath(xpath):
+                                elem.text = self.faker_methods.get(faker_or_template, faker_or_template)()
+
+                        new_values[col] = etree.tostring(xml_tree, encoding="utf-8").decode()
+
+            # Apply updates if there are changes
             if new_values:
                 update_stmt = update(table).where(table.c[id_column] == row_dict[id_column]).values(**new_values)
                 self.session.execute(update_stmt)
@@ -136,16 +175,25 @@ class DataAnonymizer:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Anonymize CSV, JSON, XML files, and database tables.")
+    parser = argparse.ArgumentParser(
+        description="Anonymize CSV, JSON, XML files, and database tables using Faker and Jinja2 templates.",
+        epilog="Example:\n"
+               "  python anonymizer.py --config '{\"file\": \"x.csv\", \"columns\": {\"name\": \"name\"}}'\n"
+               "  python anonymizer.py --config '{\"db_url\": \"sqlite:///testfiles/my_database.db\", \"table\": \"persons\", \"columns\": {\"name\": \"name\"}}'\n"
+               "  python anonymizer.py --list-faker-methods\n"
+               "  python anonymizer.py --locale de_DE --config '{\"file\": \"x.csv\", \"columns\": {\"email\": \"{{ faker.email() }}\"}}'\n",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
     parser.add_argument("--config", nargs="+", help="JSON configurations as command-line arguments.")
     parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
     parser.add_argument("--list-faker-methods", action="store_true", help="List all available Faker methods and exit.")
 
     args = parser.parse_args()
 
-    anonymizer = DataAnonymizer(locale=args.locale)
 
     if args.list_faker_methods:
+        anonymizer = DataAnonymizer(locale=args.locale)
         anonymizer.list_faker_methods()
 
     if not args.config:
@@ -170,6 +218,9 @@ def main():
             elif config["file"].endswith(".xml"):
                 anonymizer.anonymize_xml_file(config["file"], config["columns"], config.get("overwrite", False))
         elif "table" in config:
+            if "db_url" not in config:
+                print("For database anonymization, parameter 'db_url' needs to be set in configuration!")
+                exit(-2)
             anonymizer.anonymize_db_table(
                 config["table"], 
                 config["id_column"], 
