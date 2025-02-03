@@ -102,6 +102,41 @@ class DataAnonymizer:
 
         print(f"XML file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
+    def anonymize_json_column(self, json_string, json_paths):
+        """Anonymizes a JSON column using Faker and Jinja2 templates."""
+        if not json_parse:
+            print("jsonpath-ng is required for JSON anonymization. Install it with 'pip install jsonpath-ng'.")
+            return json_string
+
+        try:
+            json_data = json.loads(json_string)
+        except json.JSONDecodeError:
+            return json_string  # Skip if not valid JSON
+
+        for json_path, faker_or_template in json_paths.items():
+            json_expr = json_parse(json_path)
+            for match in json_expr.find(json_data):
+                match.path.update(json_data, self.faker_methods.get(faker_or_template, faker_or_template)())
+
+        return json.dumps(json_data)
+
+    def anonymize_xml_column(self, xml_string, xml_paths):
+        """Anonymizes an XML column using Faker and Jinja2 templates."""
+        if not etree:
+            print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
+            return xml_string
+
+        try:
+            xml_tree = etree.fromstring(xml_string)
+        except etree.XMLSyntaxError:
+            return xml_string  # Skip if not valid XML
+
+        for xpath, faker_or_template in xml_paths.items():
+            for elem in xml_tree.xpath(xpath):
+                elem.text = self.faker_methods.get(faker_or_template, faker_or_template)()
+
+        return etree.tostring(xml_tree, encoding="utf-8").decode()
+
     def anonymize_db_table(self, table_name, id_column, columns_to_anonymize, json_columns=None, xml_columns=None):
         """Anonymizes a database table, including JSON and XML inside table columns."""
         if not self.engine:
@@ -113,7 +148,7 @@ class DataAnonymizer:
         rows = self.session.execute(query).fetchall()
 
         for row in rows:
-            row_dict = row._asdict()
+            row_dict = row._asdict()  # ✅ Convert Row object to dictionary
             new_values = {}
 
             # Standard column anonymization
@@ -128,35 +163,16 @@ class DataAnonymizer:
                     new_values[col] = template.render(row=row_dict, faker=self.fake)
 
             # JSON Column Anonymization
-            if json_columns and json_parse:
+            if json_columns:
                 for col, json_paths in json_columns.items():
                     if col in row_dict and isinstance(row_dict[col], str):
-                        try:
-                            json_data = json.loads(row_dict[col])
-                        except json.JSONDecodeError:
-                            continue  # Skip if not valid JSON
-
-                        for json_path, faker_or_template in json_paths.items():
-                            json_expr = json_parse(json_path)
-                            for match in json_expr.find(json_data):
-                                match.path.update(json_data, self.faker_methods.get(faker_or_template, faker_or_template)())
-
-                        new_values[col] = json.dumps(json_data)
+                        new_values[col] = self.anonymize_json_column(row_dict[col], json_paths)
 
             # XML Column Anonymization
-            if xml_columns and etree:
+            if xml_columns:
                 for col, xml_paths in xml_columns.items():
                     if col in row_dict and isinstance(row_dict[col], str):
-                        try:
-                            xml_tree = etree.fromstring(row_dict[col])
-                        except etree.XMLSyntaxError:
-                            continue  # Skip if not valid XML
-
-                        for xpath, faker_or_template in xml_paths.items():
-                            for elem in xml_tree.xpath(xpath):
-                                elem.text = self.faker_methods.get(faker_or_template, faker_or_template)()
-
-                        new_values[col] = etree.tostring(xml_tree, encoding="utf-8").decode()
+                        new_values[col] = self.anonymize_xml_column(row_dict[col], xml_paths)
 
             # Apply updates if there are changes
             if new_values:
