@@ -13,6 +13,63 @@
             "justMyCode": true
         },
         {
+            "name": "Python: anonymizer.py CSV",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "anonymizer.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "{\"file\": \"testfiles/persons.csv\", \"columns\": {\"firstname\": \"first_name\", \"lastname\": \"last_name\"}, \"separator\": \";\"}",
+            ]
+        },
+        {
+            "name": "Python: anonymizer.py sqlite",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "anonymizer.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "{\"db_url\": \"sqlite:///testfiles/my_database.db\", \"table\": \"persons\", \"id_column\": \"id\", \"columns\": {\"first_name\": \"first_name\", \"last_name\": \"last_name\"}}"
+
+            ]
+        },
+        {
+            "name": "Python: anonymizer.py multiple CSVs",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "anonymizer.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "{\"file\": \"testfiles/persons.csv\", \"columns\": {\"firstname\": \"first_name\", \"lastname\": \"last_name\"}, \"separator\": \";\"}",
+                "{\"file\": \"testfiles/addresses.csv\", \"columns\": {\"address\": \"address\"}, \"separator\": \";\"}",
+            ]
+        },
+        {
+            "name": "Python: anonymizer.py faker.methods in template",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "anonymizer.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "{\"file\": \"testfiles/addresses.csv\", \"columns\": {\"address\": \"{{ faker.street_address() }} {{ faker.postcode() }} {{ faker.city() }}\"}, \"separator\": \";\"}",
+            ]
+        },
+        {
+            "name": "Python: anonymizer.py JSON",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "anonymizer.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "{\"file\": \"testfiles/persons.json\", \"columns\": {\"$.addressbook.person[*].firstname\": \"first_name\", \"$.addressbook.person[*].lastname\": \"last_name\"}}",
+            ]
+        },
+        {
             "name": "Python: multi_anonymizer.py(CSV old syntax)",
             "type": "debugpy",
             "request": "launch",
@@ -168,7 +225,7 @@
             ]
         },
         {
-            "name": "Python: multi_anonymizer.py(SQLite Last Name New Syntax)",
+            "name": "Python: multi_anonymizer.py(SQLite Email Address in Sync with Name New Syntax)",
             "type": "debugpy",
             "request": "launch",
             "program": "multi_anonymizer.py",
@@ -179,8 +236,7 @@
                 "--input",
                 "sqlite:///testfiles/my_database.db:(input_type=db,type=last_name,table=persons,column=last_name,template={{__value__|upper}})",
                 "sqlite:///testfiles/my_database.db:(input_type=db,type=first_name,table=persons,column=first_name,template={{__value__|lower}})",
-                "sqlite:///testfiles/my_database.db:(input_type=db,type=email,table=persons,column=email,template={{first_name|unidecode|lower}}.{{last_name|unidecode|lower}}@example.com)",
-                "sqlite:///testfiles/my_database.db:(input_type=db,type=number,min=18,max=60,table=persons,column=age)"
+                "sqlite:///testfiles/my_database.db:(input_type=db,type=dummy,table=persons,column=email,template={{first_name|unidecode|lower}}.{{last_name|unidecode|lower}}@example.com)",
             ]
         },
         {
@@ -191,7 +247,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--input",
-                "sqlite:///testfiles/my_database.db:(input_type=db, type=xxx, table=persons, column=email)",
+                "sqlite:///testfiles/my_database.db:(input_type=db, type=email, table=persons, column=email)",
                 "sqlite:///testfiles/my_database.db:(input_type=db, type=email, table=emails, column=email)",
             ]
         },

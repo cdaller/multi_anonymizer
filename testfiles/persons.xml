@@ -1,0 +1,34 @@
+<addressbook>
+  <person>
+    <lastname>Riegler</lastname>
+    <firstname>Valentin</firstname>
+    <address id="123">
+      <street>Martinshügel 123</street>
+      <city>Linz</city>
+      <zip>4020</zip>
+      <country code="AT">Austria</country>
+    </address>
+    <address id="124">
+      <street>Wherever 19</street>
+      <city>München</city>
+      <zip>12345</zip>
+      <country code="DE">Deutschland</country>
+    </address>
+  </person>
+  <person>
+    <lastname>Auer</lastname>
+    <firstname>Gabriel</firstname>
+    <address id="125">
+      <street>Wienerstrasse 80</street>
+      <city>Graz</city>
+      <zip>1234</zip>
+      <country code="AT">Austria</country>
+    </address>
+    <address id="126">
+      <street>Radetzkystrasse 5</street>
+      <city>Vöcklabruck</city>
+      <zip>4840</zip>
+      <country code="AT">Austria</country>
+    </address>
+  </person>
+</addressbook>

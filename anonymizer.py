@@ -36,12 +36,6 @@ class DataAnonymizer:
         self.faker_cache = {}  # Cache for consistent faker values
         self.engine = None
 
-        if db_url and create_engine:
-            self.engine = create_engine(db_url)
-            self.metadata = MetaData()
-            self.Session = sessionmaker(bind=self.engine)
-            self.session = self.Session()
-
     def _get_faker_methods(self):
         """Fetch all available Faker methods, filtering out internal methods."""
         faker_methods = {}
@@ -110,6 +104,62 @@ class DataAnonymizer:
         df.to_csv(output_file, sep=separator, index=False)
         print(f"CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
+    def anonymize_json_file(self, file_path, json_paths, overwrite=False):
+        """Anonymizes a JSON file using JSONPath."""
+        if not json_parse:
+            print("jsonpath-ng is required for JSON anonymization. Install it with 'pip install jsonpath-ng'.")
+            return
+
+        with open(file_path, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+
+        for json_path, faker_or_template in json_paths.items():
+            json_expr = json_parse(json_path)
+            for match in json_expr.find(data):
+                if faker_or_template in self.faker_methods:
+                    match.full_path.update(data, self._get_consistent_faker_value(match.value, faker_or_template))
+                else:
+                    template = Template(faker_or_template)
+                    new_value = template.render(faker=self.faker_proxy())
+                    match.full_path.update(data, new_value)
+
+        output_file = file_path if overwrite else file_path.replace(".json", "_anonymized.json")
+        with open(output_file, 'w', encoding='utf-8') as file:
+            json.dump(data, file, indent=4, ensure_ascii=False)
+
+        print(f"JSON file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+    
+    def anonymize_xml_file(self, file_path, xml_paths, overwrite=False):
+        """Anonymizes an XML file using XPath."""
+        if not etree:
+            print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
+            return
+
+        with open(file_path, 'r', encoding='utf-8') as file:
+            xml_string = file.read()
+
+        try:
+            xml_tree = etree.fromstring(xml_string)
+        except etree.XMLSyntaxError:
+            print(f"Invalid XML in file: {file_path}")
+            return
+
+        for xpath, faker_or_template in xml_paths.items():
+            print(f"working on xpath {xpath}")
+            for elem in xml_tree.xpath(xpath):
+                print(f"found elem {elem.text}")
+                if faker_or_template in self.faker_methods:
+                    elem.text = self._get_consistent_faker_value(elem.text, faker_or_template)
+                else:
+                    template = Template(faker_or_template)
+                    elem.text = template.render(faker=self.faker_proxy())
+
+        result = etree.tostring(xml_tree, pretty_print=True, encoding="utf-8").decode()
+        output_file = file_path if overwrite else file_path.replace(".xml", "_anonymized.xml")
+        with open(output_file, 'w', encoding='utf-8') as file:
+            file.write(result)
+
+        print(f"XML file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
         
     def anonymize_db_table(self, db_url, table_name, id_column, columns_to_anonymize):
         """Anonymizes a database table while ensuring consistency."""
@@ -171,7 +221,7 @@ Examples:
    python anonymizer.py --config '{"file": "testfiles/persons.csv", "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row['firstname'].lower() }}.{{ row['lastname'].lower() }}@example.com" }, "overwrite": false, "separator": ";" }'
 
 2. JSON file anonymization:
-   python anonymizer.py --config '{"file": "testfiles/persons.json", "columns": {"$.person.firstname": "first_name", "$.person.lastname": "last_name"}}'
+   python anonymizer.py --config '{"file": "testfiles/persons.json", "columns": {"$.addressbook.person[*].firstname": "first_name", "$.addressbook.person[*].lastname": "last_name"}}'
 
 3. XML file anonymization:
    python anonymizer.py --config '{"file": "testfiles/persons.xml", "columns": {"//person/firstname": "first_name", "//person/lastname": "last_name"}}'
@@ -181,6 +231,8 @@ Examples:
 
 5. List all available Faker methods:
    python anonymizer.py --list-faker-methods
+
+For further details and examples, see the readme.md file!
 """,
         formatter_class=argparse.RawTextHelpFormatter
     )
@@ -206,12 +258,15 @@ Examples:
         config = json.loads(config_str)
 
         if "file" in config:
-            anonymizer.anonymize_csv(
-                config["file"],
-                config["columns"],
-                config.get("overwrite", False),
-                config.get("separator", ",")
-            )
+            if config["file"].endswith(".json"):
+                anonymizer.anonymize_json_file(config["file"], config["columns"], config.get("overwrite", False))
+            elif config["file"].endswith(".xml"):
+                anonymizer.anonymize_xml_file(config["file"], config["columns"], config.get("overwrite", False))
+            elif config["file"].endswith(".csv"):
+                anonymizer.anonymize_csv(config["file"], config["columns"], config.get("overwrite", False), config.get("separator", ","))
+            else:
+                print("Could not detect file type from the name. Supports *.csv, *.json and *.xml files!")
+                exit(-2)            
         elif "table" in config:
             if 'db_url' not in config:
                 print("Database anonymization needs 'db_url' set!")

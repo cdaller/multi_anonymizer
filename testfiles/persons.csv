@@ -1,5 +1,6 @@
-id;firstname;lastname;email
-1;Gabriel;Auer;gauer@gmail.com
-2;Robert;Gastegger;rgastegger@example.com
-3;Valentin;Riegler;valrieg123@hotmail.com
-4;Andreas;Kainz;aka@foobar.at
+id;firstname;lastname;email;age
+1;Gabriel;Auer;gauer@gmail.com;22
+2;Robert;Gastegger;rgastegger@example.com;40
+3;Valentin;Riegler;valrieg123@hotmail.com;90
+4;Andreas;Kainz;aka@foobar.at;33
+5;Claudia;Kainz;cka@foobar.at;34
