@@ -63,13 +63,19 @@ class DataAnonymizer:
         if original_value in self.faker_cache[faker_type]:
             return self.faker_cache[faker_type][original_value]
 
-        if faker_type in self.faker_methods:
+        # ✅ Handle number anonymization with min/max
+        if faker_type == "number":
+            min_val = kwargs.get("min", 0)
+            max_val = kwargs.get("max", 100)
+            new_value = self.fake.random_int(min=min_val, max=max_val)
+        elif faker_type in self.faker_methods:
             new_value = self.faker_methods[faker_type](**kwargs)
         else:
             new_value = f"INVALID_FAKER_METHOD({faker_type})"
 
         self.faker_cache[faker_type][original_value] = new_value
         return new_value
+
     
     def faker_proxy(self):
         """Return a dictionary of Faker functions that can be used in Jinja2 templates."""
@@ -77,34 +83,39 @@ class DataAnonymizer:
 
 
     def anonymize_csv(self, file_path, columns_to_anonymize, overwrite=False, separator=","):
-            """Anonymizes a CSV file using Faker and Jinja2 templates."""
-            if not pd:
-                print("Pandas is required for CSV anonymization. Install it with 'pip install pandas'.")
-                return
+        """Anonymizes a CSV file using Faker and Jinja2 templates."""
+        if not pd:
+            print("Pandas is required for CSV anonymization. Install it with 'pip install pandas'.")
+            return
 
-            df = pd.read_csv(file_path, sep=separator)
+        df = pd.read_csv(file_path, sep=separator)
 
-            for col, faker_or_template in columns_to_anonymize.items():
-                if col in df.columns:
-                    if faker_or_template in self.faker_methods:
-                        df[col] = df[col].apply(lambda x: self._get_consistent_faker_value(x, faker_or_template))
-                    else:
-                        template = Template(faker_or_template)
-                        df[col] = df.apply(lambda row: template.render(
-                            row=row.to_dict(),
-                            faker=self.faker_proxy()
-                        ), axis=1)
+        for col, faker_or_template in columns_to_anonymize.items():
+            if col in df.columns:
+                if isinstance(faker_or_template, dict) and "type" in faker_or_template:
+                    # ✅ Handle "number" anonymization with min/max
+                    df[col] = df[col].apply(lambda x: self._get_consistent_faker_value(
+                        x, faker_or_template["type"], **faker_or_template.get("params", {})
+                    ))
+                elif faker_or_template in self.faker_methods:
+                    df[col] = df[col].apply(lambda x: self._get_consistent_faker_value(x, faker_or_template))
+                else:
+                    template = Template(faker_or_template)
+                    df[col] = df.apply(lambda row: template.render(
+                        row=row.to_dict(),
+                        faker=self.faker_proxy()
+                    ), axis=1)
 
-            output_file = file_path if overwrite else file_path.replace(".csv", "_anonymized.csv")
-            df.to_csv(output_file, sep=separator, index=False)
-            print(f"CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+        output_file = file_path if overwrite else file_path.replace(".csv", "_anonymized.csv")
+        df.to_csv(output_file, sep=separator, index=False)
+        print(f"CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+
         
     def anonymize_db_table(self, db_url, table_name, id_column, columns_to_anonymize):
         """Anonymizes a database table while ensuring consistency."""
         if not create_engine:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
             return
-
 
         engine = create_engine(db_url)
         metadata = MetaData()
@@ -122,7 +133,12 @@ class DataAnonymizer:
 
             for col, faker_or_template in columns_to_anonymize.items():
                 if col in row_dict:
-                    if faker_or_template in self.faker_methods:
+                    if isinstance(faker_or_template, dict) and "type" in faker_or_template:
+                        # ✅ Handle "number" anonymization with min/max
+                        new_values[col] = self._get_consistent_faker_value(
+                            row_dict[col], faker_or_template["type"], **faker_or_template.get("params", {})
+                        )
+                    elif faker_or_template in self.faker_methods:
                         new_values[col] = self._get_consistent_faker_value(row_dict[col], faker_or_template)
                     else:
                         template = Template(faker_or_template)
@@ -133,7 +149,9 @@ class DataAnonymizer:
                 session.execute(update_stmt)
 
         session.commit()
-        print(f"Table '{table_name}' anonymized successfully.")
+        session.close()
+        print(f"Table '{table_name}' anonymized successfully in database {db_url}.")
+
 
     def list_faker_methods(self):
         """Print all available Faker methods and exit."""
