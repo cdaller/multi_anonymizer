@@ -218,7 +218,7 @@ class DataAnonymizer:
 
         print(f"XML file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
-    def anonymize_db_table(self, db_url, table_name, id_column, where_clause, columns_to_anonymize, json_columns=None, xml_columns=None):
+    def anonymize_db_table(self, db_url, table_schema, table_name, id_column, where_clause, columns_to_anonymize, json_columns=None, xml_columns=None):
         """Anonymizes a database table, including JSON and XML inside table columns."""
         if not create_engine:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
@@ -227,7 +227,7 @@ class DataAnonymizer:
         engine = create_engine(db_url)
         metadata = MetaData()
         metadata.reflect(bind=engine)
-        table = Table(table_name, metadata, autoload_with=engine)
+        table = Table(table_name, metadata, autoload_with = engine, schema = table_schema)
         Session = sessionmaker(bind=engine)
         session = Session()
 
@@ -345,6 +345,7 @@ For further details and examples, see the readme.md file!
                 exit(-1)
             anonymizer.anonymize_db_table(
                 config["db_url"], 
+                config["schema"], 
                 config["table"], 
                 config["id_column"], 
                 config["where"], 
