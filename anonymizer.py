@@ -127,18 +127,37 @@ class DataAnonymizer:
         self.session.commit()
         print(f"Table '{table_name}' anonymized successfully.")
 
+    def list_faker_methods(self):
+        """Print all available Faker methods and exit."""
+        print("Available Faker methods:")
+        for method in sorted(self.faker_methods.keys()):
+            print(f"- {method}")
+        exit(0)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Anonymize CSV, JSON, XML files, and database tables.")
-    parser.add_argument("--config", nargs="+", help="JSON configurations as command-line arguments.", required=True)
+    parser.add_argument("--config", nargs="+", help="JSON configurations as command-line arguments.")
     parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
+    parser.add_argument("--list-faker-methods", action="store_true", help="List all available Faker methods and exit.")
 
     args = parser.parse_args()
+
+    anonymizer = DataAnonymizer(locale=args.locale)
+
+    if args.list_faker_methods:
+        anonymizer.list_faker_methods()
+
+    if not args.config:
+        print("No configuration provided. Use --config or --list-faker-methods.")
+        return
+
     for config_str in args.config:
         config = json.loads(config_str)
         anonymizer = DataAnonymizer(config.get("db_url"), args.locale)
 
         if "file" in config:
+            print(f'Working on file {config["file"]}')
             if config["file"].endswith(".csv"):
                 anonymizer.anonymize_csv(
                     config["file"],
