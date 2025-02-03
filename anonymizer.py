@@ -70,6 +70,11 @@ class DataAnonymizer:
 
         self.faker_cache[faker_type][original_value] = new_value
         return new_value
+    
+    def faker_proxy(self):
+        """Return a dictionary of Faker functions that can be used in Jinja2 templates."""
+        return {method: (lambda m=method: self.faker_methods[m]()) for method in self.faker_methods}
+
 
     def anonymize_csv(self, file_path, columns_to_anonymize, overwrite=False, separator=","):
             """Anonymizes a CSV file using Faker and Jinja2 templates."""
@@ -87,22 +92,29 @@ class DataAnonymizer:
                         template = Template(faker_or_template)
                         df[col] = df.apply(lambda row: template.render(
                             row=row.to_dict(),
-                            faker=lambda method_name: self._get_consistent_faker_value(row[col], method_name)
+                            faker=self.faker_proxy()
                         ), axis=1)
 
             output_file = file_path if overwrite else file_path.replace(".csv", "_anonymized.csv")
             df.to_csv(output_file, sep=separator, index=False)
             print(f"CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
         
-    def anonymize_db_table(self, table_name, id_column, columns_to_anonymize):
+    def anonymize_db_table(self, db_url, table_name, id_column, columns_to_anonymize):
         """Anonymizes a database table while ensuring consistency."""
-        if not self.engine:
+        if not create_engine:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
             return
 
-        table = Table(table_name, self.metadata, autoload_with=self.engine)
+
+        engine = create_engine(db_url)
+        metadata = MetaData()
+        metadata.reflect(bind=engine)
+        table = Table(table_name, metadata, autoload_with=engine)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+
         query = select(table)
-        rows = self.session.execute(query).fetchall()
+        rows = session.execute(query).fetchall()
 
         for row in rows:
             row_dict = row._asdict()
@@ -110,14 +122,25 @@ class DataAnonymizer:
 
             for col, faker_or_template in columns_to_anonymize.items():
                 if col in row_dict:
-                    new_values[col] = self._get_consistent_faker_value(row_dict[col], faker_or_template)
+                    if faker_or_template in self.faker_methods:
+                        new_values[col] = self._get_consistent_faker_value(row_dict[col], faker_or_template)
+                    else:
+                        template = Template(faker_or_template)
+                        new_values[col] = template.render(row=row_dict, faker=self.faker_proxy())
 
             if new_values:
                 update_stmt = update(table).where(table.c[id_column] == row_dict[id_column]).values(**new_values)
-                self.session.execute(update_stmt)
+                session.execute(update_stmt)
 
-        self.session.commit()
+        session.commit()
         print(f"Table '{table_name}' anonymized successfully.")
+
+    def list_faker_methods(self):
+        """Print all available Faker methods and exit."""
+        print("Available Faker methods:")
+        for method in sorted(self.faker_methods.keys()):
+            print(f"- {method}")
+        exit(0)
 
 
 def main():
@@ -172,12 +195,14 @@ Examples:
                 config.get("separator", ",")
             )
         elif "table" in config:
+            if 'db_url' not in config:
+                print("Database anonymization needs 'db_url' set!")
+                exit(-1)
             anonymizer.anonymize_db_table(
+                config["db_url"], 
                 config["table"], 
                 config["id_column"], 
-                config.get("columns", {}), 
-                config.get("json_columns", {}), 
-                config.get("xml_columns", {})
+                config.get("columns", {})
             )
 
 if __name__ == "__main__":
