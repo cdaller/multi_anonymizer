@@ -131,7 +131,7 @@ class DataAnonymizer:
         print(f"JSON file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
     
     def anonymize_xml_file(self, file_path, xml_paths, overwrite=False):
-        """Anonymizes an XML file using XPath."""
+        """Anonymizes an XML file using XPath for both element text and attributes."""
         if not etree:
             print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
             return
@@ -146,22 +146,36 @@ class DataAnonymizer:
             return
 
         for xpath, faker_or_template in xml_paths.items():
-            print(f"working on xpath {xpath}")
-            for elem in xml_tree.xpath(xpath):
-                print(f"found elem {elem.text}")
-                if faker_or_template in self.faker_methods:
-                    elem.text = self._get_consistent_faker_value(elem.text, faker_or_template)
-                else:
-                    template = Template(faker_or_template)
-                    elem.text = template.render(faker=self.faker_proxy())
+            if "@" in xpath:  # If XPath targets an attribute (e.g., //address/@id)
+                attr_xpath, attr_name = xpath.rsplit("/@", 1)
+                for elem in xml_tree.xpath(attr_xpath):
+                    if elem.get(attr_name) is not None:
+                        if isinstance(faker_or_template, dict) and "type" in faker_or_template:
+                            new_value = self._get_consistent_faker_value(
+                                elem.get(attr_name), faker_or_template["type"], **faker_or_template.get("params", {})
+                            )
+                        elif faker_or_template in self.faker_methods:
+                            new_value = self._get_consistent_faker_value(elem.get(attr_name), faker_or_template)
+                        else:
+                            template = Template(faker_or_template)
+                            new_value = template.render(faker=self.faker_proxy())
 
-        result = etree.tostring(xml_tree, pretty_print=True, encoding=self.encoding).decode()
+                        elem.set(attr_name, str(new_value))  # Update the attribute value
+
+            else:  # Normal text element anonymization
+                for elem in xml_tree.xpath(xpath):
+                    if faker_or_template in self.faker_methods:
+                        elem.text = self._get_consistent_faker_value(elem.text, faker_or_template)
+                    else:
+                        template = Template(faker_or_template)
+                        elem.text = template.render(faker=self.faker_proxy())
+
         output_file = file_path if overwrite else file_path.replace(".xml", "_anonymized.xml")
         with open(output_file, 'w', encoding=self.encoding) as file:
-            file.write(result)
+            file.write(etree.tostring(xml_tree, encoding="utf-8").decode())
 
         print(f"XML file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
-        
+
     def anonymize_db_table(self, db_url, table_name, id_column, columns_to_anonymize):
         """Anonymizes a database table while ensuring consistency."""
         if not create_engine:
