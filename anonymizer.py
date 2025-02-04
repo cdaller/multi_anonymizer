@@ -297,8 +297,10 @@ class DataAnonymizer:
                     elif faker_or_template in self.faker_methods:
                         new_values[col] = self._get_consistent_faker_value(row_dict[col], faker_or_template)
                     else:
+                        # merge original row and already changed values - use this as a template context
+                        context = {**row_dict, **new_values}
                         template = Template(faker_or_template)
-                        new_values[col] = template.render(row=row_dict, faker=self.faker_proxy())
+                        new_values[col] = template.render(row=context, faker=self.faker_proxy())
 
             # JSON Column Anonymization
             if json_columns:
