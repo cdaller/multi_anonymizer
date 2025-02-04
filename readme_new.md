@@ -215,6 +215,16 @@ python anonymizer.py \
 
 ### Database Tables
 
+One can filter to rows using a `where` clause or set the `schema` of a table (if not default schema).
+
+Anonymizing database tables comes in two flavours:
+* tables with unique id column: The anonymizer reads all rows (`where` clause applied) and anonymizes all columns selected with their anonymization types.
+* tables without id column: as there is no unique id, the script cannot update row by row but needs to update all values in the selected columns (`where` clause is also applied).
+
+#### Database Tables with a unique id column
+
+The anonymizer reads all rows (`where` clause applied) and anonymizes all columns selected with their anonymization types.
+
 ```bash
 rm testfiles/my_database.db
 # create test database:
@@ -242,6 +252,26 @@ python anonymizer.py \
   }'
 ```
 
+#### Database Tables without a unique id column
+
+As there is no unique id, the script cannot update row by row but needs to update all values in the selected columns. So a distinct set of values of the given column(s) are fetched, all values are anonymized and a single update is then executed for every distinct value to update all rows at once.
+
+This has the advantage that not for every row an update statement is executed (performance!), but has the severe drawback, that there is no "row-context" that can be referenced to set values.
+
+So you can easily set all rows having a first name of "Mike" and last name of "Smith" to its anonymized counterparts. But values are not replaced row by row, one cannot set the email address to "<firstname>.<lastname>@example.com"! One can anonymize the email column, but not with a ninja2 template using values from other columns!
+
+```bash
+rm testfiles/my_database.db
+# create test database:
+testfiles/create_sqlite.py testfiles/my_database.db
+
+# show content of db:
+sqlite3 testfiles/my_database.db "select * from persons"
+
+# anonymize db table
+python anonymizer.py \
+  --config '{"db_url": "sqlite:///testfiles/my_database.db", "table": "persons", "columns": {"first_name": "first_name", "last_name": "last_name"}}'
+```
 
 
 #### Json/XML Contained in Database Table Columns
@@ -278,7 +308,12 @@ For MySql this seems to work (untested): `"mysql+pymysql://user:pass@host/test?c
 * [x] use faker calls in jinja2 expression (for example `{{ street }} {{ zip }} {{ town}}`)
 * [x] random numbers, min, max
 * [x] json/xml in database columns
-* regexp
+* [ ] xml: support namespaces
+* regexp: only anonymize part of the content
 * db
-  * table schema
-  * where clause for db
+  * [x] table schema
+  * [x] where clause for db
+  * [ ] tables without id column
+  * [ ] union with other tables for where clause
+  * [ ] support multiple id columns
+* [ ] add counter, how many values were anonymized

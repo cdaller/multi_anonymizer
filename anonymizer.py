@@ -22,7 +22,7 @@ except ImportError:
     etree = None
 
 try:
-    from sqlalchemy import create_engine, MetaData, Table, select, update, text
+    from sqlalchemy import create_engine, MetaData, Table, select, update, text, bindparam
     from sqlalchemy.orm import sessionmaker
 except ImportError:
     create_engine = None
@@ -231,6 +231,20 @@ class DataAnonymizer:
         Session = sessionmaker(bind=engine)
         session = Session()
 
+        # handling tables with id column:
+        if id_column is not None:
+            self.anonymize_db_column(session, table, id_column, where_clause, columns_to_anonymize, json_columns, xml_columns)
+
+        # no id column:
+        else:
+            for column_name, faker_or_template in columns_to_anonymize.items():
+                self.anonymize_db_column_without_id_column(session, table, column_name, faker_or_template, where_clause)
+
+        session.commit()
+        session.close()
+        print(f"Table '{table_name}' anonymized successfully in database {db_url}.")
+
+    def anonymize_db_column(self, session, table, id_column, where_clause, columns_to_anonymize, json_columns=None, xml_columns=None):
         query = select(table)
         # Apply WHERE clause filtering if provided
         if where_clause:
@@ -271,9 +285,39 @@ class DataAnonymizer:
                 update_stmt = update(table).where(table.c[id_column] == row_dict[id_column]).values(**new_values)
                 session.execute(update_stmt)
 
-        session.commit()
-        session.close()
-        print(f"Table '{table_name}' anonymized successfully in database {db_url}.")
+
+    def anonymize_db_column_without_id_column(self, session, table, column_name, faker_or_template, where_clause):
+        column = getattr(table.c, column_name)
+        select_stmt = select(column).distinct()
+        if where_clause:
+            print(f"add where clause '{where_clause}'")
+            select_stmt = select_stmt.where(text(where_clause))
+
+        # Select all distinct values in the column
+        distinct_values = session.execute(select_stmt).scalars().all()
+        anonymized_map = {}
+        for orig_value in distinct_values:
+            # FIXME: add "type" check!
+            if faker_or_template in self.faker_methods:
+                anonymized_value = self._get_consistent_faker_value(orig_value, faker_or_template)
+            else:
+                template = Template(faker_or_template)
+                anonymized_value = template.render(row={}, faker=self.faker_proxy())
+            anonymized_map[orig_value] = anonymized_value
+
+        # Update table with anonymized values
+        for original_value, anonymized_value in anonymized_map.items():
+            update_stmt = (
+                    update(table)
+                    .where(table.c[column_name] == bindparam('orig_value'))
+                    .values({column_name: bindparam('new_value')})
+                )
+            if where_clause:
+                print(f"add where clause to update'{where_clause}'")
+                update_stmt = update_stmt.where(text(where_clause))
+
+            session.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
+            print(f'replacing {column_name}: {original_value} with {anonymized_value}')
 
 
     def list_faker_methods(self):
@@ -345,10 +389,10 @@ For further details and examples, see the readme.md file!
                 exit(-1)
             anonymizer.anonymize_db_table(
                 config["db_url"], 
-                config["schema"], 
+                config.get("schema", None), 
                 config["table"], 
-                config["id_column"], 
-                config["where"], 
+                config.get("id_column", None), 
+                config.get("where", None), 
                 config.get("columns", {}),
                 config.get("json_columns", {}),
                 config.get("xml_columns", {}),
