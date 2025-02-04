@@ -257,6 +257,24 @@ python anonymizer.py \
   }'
 ```
 
+Using templates to anonymize columns
+
+```bash
+python anonymizer.py \
+  --config '{
+    "db_url": "sqlite:///testfiles/my_database.db",
+    "table": "persons",
+    "id_column": "id",
+    "columns": {
+      "first_name": "first_name",
+      "last_name": "last_name",
+      "email": "{{ (row[\"first_name\"] or \"\").lower() }}.{{ (row[\"last_name\"] or \"\").lower() }}@example.com"
+    }
+  }'
+```
+
+
+
 #### Database Tables without a unique id column
 
 As there is no unique id, the script cannot update row by row but needs to update all values in the selected columns. So a distinct set of values of the given column(s) are fetched, all values are anonymized and a single update is then executed for every distinct value to update all rows at once.
@@ -278,6 +296,30 @@ python anonymizer.py \
   --config '{"db_url": "sqlite:///testfiles/my_database.db", "table": "persons", "columns": {"first_name": "first_name", "last_name": "last_name"}}'
 ```
 
+#### Using JOINed Database Tables
+
+For some more complicated where clauses, the table to be anonymized needs to be joined with another table.
+The target table (the one to be anonymized) is called `target_table`
+
+With id column:
+
+```bash
+python anonymizer.py \
+  --config '
+  {
+    "db_url": "sqlite:///testfiles/my_database.db",
+    "table": "persons",
+    "id_column": "id",
+    "where": "email.id > 5",
+    "join": "EMAILS email ON target_table.id = email.person_id",
+    "columns": {
+      "first_name": "first_name",
+      "last_name": "last_name"
+    }
+  }'
+```
+
+Without id column JOIN is currently not supported as the update command does not support JOINs.
 
 #### Json/XML Contained in Database Table Columns
 
@@ -320,5 +362,5 @@ For MySql this seems to work (untested): `"mysql+pymysql://user:pass@host/test?c
   * [x] where clause for db
   * [x] tables without id column
   * [ ] union with other tables for where clause
-  * [ ] support multiple id columns
+  * [x] support multiple id columns
 * [ ] add counter, how many values were anonymized

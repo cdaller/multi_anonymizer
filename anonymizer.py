@@ -218,33 +218,68 @@ class DataAnonymizer:
 
         print(f"XML file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
-    def anonymize_db_table(self, db_url, table_schema, table_name, id_columns, where_clause, columns_to_anonymize, json_columns=None, xml_columns=None):
+    def parse_sqlalchemy_joins(self, engine, metadata, table_alias, join_definitions):
+        """Parses join definitions from CLI into SQLAlchemy joins."""
+        join_tables = {}
+        join_conditions = []
+
+        for join_def in join_definitions:
+            try:
+                table_name, alias, on_clause = join_def.split(" ", 2)  # Split into parts
+                on_clause = on_clause.replace("ON ", "").strip()  # Remove "ON" prefix
+
+                # print(f"Joining {table_alias} with {table_name} ON {on_clause}")
+
+                join_table = Table(table_name, metadata, autoload_with=engine).alias(alias)
+                join_tables[alias] = join_table
+                join_conditions.append((alias, join_table, on_clause))
+            except ValueError:
+                raise ValueError(f"Invalid join format: {join_def}. Expected format: '<table> <alias> ON <condition>'")
+
+        return join_conditions
+    
+    def add_where_clause(self, query, where_clause):
+        if where_clause:
+            query = query.where(text(where_clause))
+    
+    def add_joins(self, query, join_conditions):
+        for alias, join_table, on_clause in join_conditions:
+            print(f"Joining {alias} with {join_table} ON {on_clause}")
+            query = query.join(join_table, text(on_clause))
+        return query
+
+    def anonymize_db_table(self, db_url, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None):
         """Anonymizes a database table, including JSON and XML inside table columns."""
         if not create_engine:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
             return
-
+        
         engine = create_engine(db_url)
         metadata = MetaData()
         metadata.reflect(bind=engine)
-        table = Table(table_name, metadata, autoload_with = engine, schema = table_schema)
+        
+        table = Table(table_name, metadata, autoload_with=engine, schema=table_schema).alias('target_table')
         Session = sessionmaker(bind=engine)
         session = Session()
 
+        # Parse and apply JOINs if provided
+        join_conditions = self.parse_sqlalchemy_joins(engine, metadata, "target_table", joins)
+
         if id_columns:
-            self.anonymize_db_with_id_column(session, table, id_columns, where_clause, columns_to_anonymize, json_columns, xml_columns)
+            self.anonymize_db_with_id_column(session, table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns, xml_columns)
         else:
-           self.anonymize_db_without_id_column(session, table, columns_to_anonymize, where_clause)
+           self.anonymize_db_without_id_column(session, table, where_clause, join_conditions, columns_to_anonymize)
 
         session.commit()
         session.close()
         print(f"Table '{table_name}' anonymized successfully in database {db_url}.")
 
-    def anonymize_db_with_id_column(self, session, table, id_columns, where_clause, columns_to_anonymize, json_columns=None, xml_columns=None):
+    def anonymize_db_with_id_column(self, session, table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None):
         query = select(table)
-        # Apply WHERE clause filtering if provided
-        if where_clause:
-            query = query.where(text(where_clause))
+
+        self.add_joins(query, join_conditions)
+
+        self.add_where_clause(query, where_clause)
         rows = session.execute(query).fetchall()
 
         for row in rows:
@@ -283,16 +318,16 @@ class DataAnonymizer:
                 session.execute(update_stmt)
 
 
-    def anonymize_db_without_id_column(self, session, table, columns_to_anonymize, where_clause):
+    def anonymize_db_without_id_column(self, session, table, where_clause, join_conditions, columns_to_anonymize):
         for column_name, faker_or_template in columns_to_anonymize.items():
             column = getattr(table.c, column_name)
-            select_stmt = select(column).distinct()
-            if where_clause:
-                # print(f"add where clause '{where_clause}'")
-                select_stmt = select_stmt.where(text(where_clause))
+            query = select(column).distinct()
+
+            self.add_where_clause(query, where_clause)
+
 
             # Select all distinct values in the column
-            distinct_values = session.execute(select_stmt).scalars().all()
+            distinct_values = session.execute(query).scalars().all()
             anonymized_map = {}
             for orig_value in distinct_values:
                 if isinstance(faker_or_template, dict) and "type" in faker_or_template:
@@ -314,12 +349,12 @@ class DataAnonymizer:
                         .where(table.c[column_name] == bindparam('orig_value'))
                         .values({column_name: bindparam('new_value')})
                     )
-                if where_clause:
-                    #print(f"add where clause to update'{where_clause}'")
-                    update_stmt = update_stmt.where(text(where_clause))
+                self.add_where_clause(update_stmt, where_clause)
 
                 session.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
                 #print(f'replaced {column_name}: {original_value} with {anonymized_value}')
+
+            # TODO: add xml/json??? Does not make sense without id column???
 
 
     def list_faker_methods(self):
@@ -347,6 +382,7 @@ Examples:
 
 4. Database table anonymization:
    python anonymizer.py --config '{"db_url": "sqlite:///test.db", "table": "persons", "id_column": "id", "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row['firstname'].lower() }}.{{ row['lastname'].lower() }}@example.com" }, "json_columns": {"json_data": {"$.person.email": "email"}}}'
+   python anonymizer.py --config '{"db_url": "sqlite:///test.db", "table": "persons", "id_columns": ["id", "foobar"], "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row['firstname'].lower() }}.{{ row['lastname'].lower() }}@example.com" }, "json_columns": {"json_data": {"$.person.email": "email"}}}'
 
 5. List all available Faker methods:
    python anonymizer.py --list-faker-methods
@@ -389,15 +425,22 @@ For further details and examples, see the readme.md file!
             if 'db_url' not in config:
                 print("Database anonymization needs 'db_url' set!")
                 exit(-1)
+
             id_columns = config.get("id_columns", [])
             if "id_column" in config:
                 id_columns.append(config["id_column"])
+
+            table_joins = config.get("joins", [])
+            if "join" in config:
+                table_joins.append(config["join"])
+
             anonymizer.anonymize_db_table(
                 config["db_url"], 
                 config.get("schema", None), 
                 config["table"], 
                 id_columns, 
                 config.get("where", None), 
+                table_joins, 
                 config.get("columns", {}),
                 config.get("json_columns", {}),
                 config.get("xml_columns", {}),
