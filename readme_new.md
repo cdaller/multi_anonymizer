@@ -236,6 +236,11 @@ sqlite3 testfiles/my_database.db "select * from persons"
 # anonymize db table
 python anonymizer.py \
   --config '{"db_url": "sqlite:///testfiles/my_database.db", "table": "persons", "id_column": "id", "columns": {"first_name": "first_name", "last_name": "last_name"}}'
+
+# multiple id columns are also possible, but not used in the example database
+#python anonymizer.py \
+#  --config '{"db_url": "sqlite:///testfiles/my_database.db", "table": "persons", "id_columns": ["id", "foobar"], "columns": {"first_name": "first_name", "last_name": "last_name"}}'
+
 ```
 
 Using a where clause to filter to specific rows in the database:
@@ -313,7 +318,7 @@ For MySql this seems to work (untested): `"mysql+pymysql://user:pass@host/test?c
 * db
   * [x] table schema
   * [x] where clause for db
-  * [ ] tables without id column
+  * [x] tables without id column
   * [ ] union with other tables for where clause
   * [ ] support multiple id columns
 * [ ] add counter, how many values were anonymized
