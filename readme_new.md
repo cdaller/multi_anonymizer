@@ -26,55 +26,44 @@ pip install json jsonpath-ng
 pip install lxml
 ```
 
-## Requirements
-
-I want Python script to anonymize data. The following is a list of requirements. I want you to generate a script that fulfilles all requirements, not only parts of them!
-* Python script should have a shebang "#!/usr/bin/env python3"
-* User can pass one or multiple command line parameters to define the source data to be anonymized.
-* These configuration can define files (csv, json, xml files) or tables in database connections.
-* For anonymization, the faker library should be used.
-* For database connetion, the sqlalchemy library should be used.
-* The python imports should be optional. If I do not want database or xml/json anonymization, the libraries must not be mandatory.
-* For anonymization in files (csv, json or xml) I want to allow "overwrite" to overwrite the source file. Default should be to create a new file.
-* Anonymization should be consistent across multiple anonymization targets. So I want to give multiple configs and for example all last names "Huber" should be replaced by the same faker values.
-* I want to use jinja2 templates to be able to create new values. In the templates, I want to reference values from other columns in the table or csv file using syntax like the following:
-```
-{
-    "file": "testfiles/persons.csv",
-    "columns": {
-        "firstname": "first_name",
-        "lastname": "last_name",
-        "email": "{{ row["firstname"].lower() }}.{{ row["lastname"].lower() }}@example.com"
-    },
-    "overwrite": false,
-    "separator": ";"
-}
-```
-* I also want to be able to create new values from faker values like "{{ faker.zip }} {{ faker.city }}" using faker methods in specific columns.
-* for json anonymization, I want to give json-paths to define, which fields should be anonymized.
-* for xml anonymization, I want to give xml paths to define, which fields should be anonymized.
-* For database anonymization, I want to define an id_column that can be used to reference the row to anonymize.
-* I want to be able to anonymize json or xml strings, that are contained in a database table column.
-* I want to set the locale that is used to anonymize values with faker library
-* as a command line parameter to the script I want to get a list of valid faker methods. If this parameter is used, the script should exist and ignore all configuration that are passed.
-* faker anonymization should be extended by the type "number" to give a random number. In this cases, a min and a max value should be definable. This is usefull to set a random age between 20 and 80 years old. The min and max number should be optionally settable by the user when defining the type in the configuration.
-* For csv files I want to define the separator.
-* For csv files I want to define if the file contains a header line.
-* The command line help should print examples to let the user know how to use anonymization for csv files (including explamples for jinja2 templates), json and xml files. And also for database usage using an sqlite database with a table "persons" with columns "firstname", "lastname", "age", "email" and "json_data" having an object "person" with properties "firstname", "lastname", "age" and "email". The examples should include how to set the anonymized email address to "firstname.lastname@example.com" all in lowercase using jinja2 templates.
-
 ## Usage
 
-```bash
-# simple anonymization of first/last name:
-python anonymizer.py \
-  --config '{"file": "testfiles/persons.csv", "columns": {"firstname": "first_name", "lastname": "last_name"}, "separator": ";"}'
+Simple anonymization of first/last name. The script tries to anonymize data so the resemblance to the origial is a close as possible. So if there are two persons with the same last name in the csv file, they will get the same anonymized last name after anonymization! By default, the original source file is not modified, but a new file with the extended name `_anonymized` is created. Use `overwrite` to modify the original file.
 
-# use a locale:
+```bash
+python anonymizer.py \
+  --config '
+  {
+    "file": "testfiles/persons.csv",
+    "columns": {
+      "firstname": "first_name",
+      "lastname": "last_name"
+    },
+    "separator": ";"
+  }
+  '
+```
+
+Using a locale to define the anonymized value's location:
+
+```bash
 python anonymizer.py \
   --locale de_DE \
-  --config '{"file": "testfiles/persons.csv", "columns": {"firstname": "first_name", "lastname": "last_name"}, "separator": ";"}'
+  --config '
+  {
+    "file": "testfiles/persons.csv",
+    "columns": {
+      "firstname": "first_name",
+      "lastname": "last_name"
+    },
+    "separator": ";"
+  }
+'
+```
 
-# use a number column and give min/max for the number:
+Use a number column and give min/max for the number - this form uses a different syntax giving the faker type as `type`. This allows to add some parameters. Currently, `number` is the only type having parameters (`min` and `max`).
+
+```bash
 python anonymizer.py \
   --locale de_DE \
   --config '
@@ -88,12 +77,15 @@ python anonymizer.py \
           "max": 40
         }
       }
-    }, 
+    },
     "separator": ";"
   }
 '
+```
 
-# the notation using the "type" can be used also for other faker methods:
+The notation using the "type" can be used also for other faker methods:
+
+```bash
 python anonymizer.py \
   --config '
   {
@@ -106,10 +98,13 @@ python anonymizer.py \
     "separator": ";"
   }
 '
+```
 
-# simple anonymization of first/last name and use a template for the email address
-# for easier configuration, use a environment variable to store the config. This makes the excaping of the various quotes easier and allows a multiline configuration
-CSV_PERSON_CONFIG='
+The following example shows the usage of a jinja2 template to fill the email address with the anonymized first- and last names of the persons.
+
+```bash
+python anonymizer.py \
+  --config '
 {
     "file": "testfiles/persons.csv",
     "columns": {
@@ -121,17 +116,15 @@ CSV_PERSON_CONFIG='
     "separator": ";"
 }
 '
-python anonymizer.py --config "${CSV_PERSON_CONFIG}"
-
-# same execution without passing the config as environment variable:
-python anonymizer.py \
-  --config '{"file": "testfiles/persons.csv", "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row[\"firstname\"].lower() }}.{{ row[\"lastname\"].lower() }}@example.com"},"separator": ";"}'
 ```
+
+Anonymized multiple csv files in one go:
 
 ```bash
 # anonymize two csv files at once and replace the address in a second csv file:
-CSV_PERSON_CONFIG='
-{
+python anonymizer.py \
+  --config '
+  {
     "file": "testfiles/persons.csv",
     "columns": {
         "firstname": "first_name",
@@ -139,34 +132,37 @@ CSV_PERSON_CONFIG='
     },
     "overwrite": false,
     "separator": ";"
-}
-'
-
-CSV_ADDRESS_CONFIG='
-{
+  }
+  ' \
+  '
+  {
     "file": "testfiles/addresses.csv",
     "columns": {
         "address": "address"
     },
     "separator": ";"
-}
-'
-python anonymizer.py --config "${CSV_PERSON_CONFIG}" "${CSV_ADDRESS_CONFIG}"
+  }
+  '
+```
 
-# by default, faker uses a two line address. Use template variables to create an own address:
-CSV_ADDRESS_CONFIG='
-{
+By default, faker uses a two line address. Use template variables to create an own address by the use of `street_address`, `postcode` and `city` faker methods:
+
+```bash
+python anonymizer.py \
+  --config '
+  {
     "file": "testfiles/addresses.csv",
     "columns": {
         "address": "{{ faker.street_address() }} {{ faker.postcode() }} {{ faker.city() }}"
     },
     "separator": ";"
-}
-'
-python anonymizer.py --config "${CSV_PERSON_CONFIG}" "${CSV_ADDRESS_CONFIG}"
+  }
+  '
 ```
 
 ### JSON Files using json paths
+
+Json files can be anonymized by the use of json paths to define what and how to anonymize:
 
 ```bash
 python anonymizer.py \
@@ -183,7 +179,7 @@ python anonymizer.py \
 
 ### XML Files using xPaths
 
-Anonymization can be done for xml elements and xml attributes:
+Same can be done for xml files (xml elements and xml attributes) using xPath expressions:
 
 ```bash
 python anonymizer.py \
@@ -200,22 +196,11 @@ python anonymizer.py \
 '
 ```
 
-```bash
-python anonymizer.py \
-  --config '
-  {
-    "file": "testfiles/persons.xml",
-    "columns": {
-      "//address/@id": {"type": "number", "params": {"min": 1000, "max": 2000}}
-    }
-  }
-'
-```
-
-
 ### Database Tables
 
-One can filter to rows using a `where` clause or set the `schema` of a table (if not default schema).
+One or multiple database tables can be anonymized consistently in one go.
+
+If only part of the table should be anonymized, the rows can be filtered using a `where` clause. Table schema is also supported by the `schema` keyword.
 
 Anonymizing database tables comes in two flavours:
 * tables with unique id column: The anonymizer reads all rows (`where` clause applied) and anonymizes all columns selected with their anonymization types.
@@ -223,7 +208,11 @@ Anonymizing database tables comes in two flavours:
 
 #### Database Tables with a unique id column
 
-The anonymizer reads all rows (`where` clause applied) and anonymizes all columns selected with their anonymization types.
+The anonymizer reads all rows (`where` clause applied) and anonymizes all columns selected with their anonymization types. This allows to use column values of the same row as templates (e.g. for the consisten anonymization of email addresses).
+
+The id columns must be set by `id_column` (single value) or `id_columns` (array) properties.
+
+The following creates an sqlite database holding two tables and anonymize the content. In this case, the original values are overwritten!
 
 ```bash
 rm testfiles/my_database.db
@@ -235,20 +224,38 @@ sqlite3 testfiles/my_database.db "select * from persons"
 
 # anonymize db table
 python anonymizer.py \
-  --config '{"db_url": "sqlite:///testfiles/my_database.db", "table": "persons", "id_column": "id", "columns": {"first_name": "first_name", "last_name": "last_name"}}'
+  --config '
+  {
+    "db_url": "sqlite:///testfiles/my_database.db",
+    "table": "persons",
+    "id_column": "id",
+    "columns": {
+      "first_name": "first_name", 
+      "last_name": "last_name"
+    }
+  }
+  '
 
-# multiple id columns are also possible, but not used in the example database
-#python anonymizer.py \
-#  --config '{"db_url": "sqlite:///testfiles/my_database.db", "table": "persons", "id_columns": ["id", "foobar"], "columns": {"first_name": "first_name", "last_name": "last_name"}}'
-
+python anonymizer.py \
+  --config '
+  {
+    "db_url": "sqlite:///testfiles/my_database.db",
+    "table": "persons",
+    "id_columns": ["id"],
+    "columns": {
+      "first_name": "first_name", 
+      "last_name": "last_name"
+    }
+  }
+  '
 ```
 
 Using a where clause to filter to specific rows in the database:
 
 ```bash
-# anonymize db table and json strings in the database
 python anonymizer.py \
-  --config '{
+  --config '
+  {
     "db_url": "sqlite:///testfiles/my_database.db",
     "table": "persons",
     "id_column": "id",
@@ -257,7 +264,7 @@ python anonymizer.py \
   }'
 ```
 
-Using templates to anonymize columns
+Using templates to anonymize column values consistently from other row values. Please note that the template may also contain non anonymized column values!
 
 ```bash
 python anonymizer.py \
@@ -273,30 +280,7 @@ python anonymizer.py \
   }'
 ```
 
-
-
-#### Database Tables without a unique id column
-
-As there is no unique id, the script cannot update row by row but needs to update all values in the selected columns. So a distinct set of values of the given column(s) are fetched, all values are anonymized and a single update is then executed for every distinct value to update all rows at once.
-
-This has the advantage that not for every row an update statement is executed (performance!), but has the severe drawback, that there is no "row-context" that can be referenced to set values.
-
-So you can easily set all rows having a first name of "Mike" and last name of "Smith" to its anonymized counterparts. But values are not replaced row by row, one cannot set the email address to "<firstname>.<lastname>@example.com"! One can anonymize the email column, but not with a ninja2 template using values from other columns!
-
-```bash
-rm testfiles/my_database.db
-# create test database:
-testfiles/create_sqlite.py testfiles/my_database.db
-
-# show content of db:
-sqlite3 testfiles/my_database.db "select * from persons"
-
-# anonymize db table
-python anonymizer.py \
-  --config '{"db_url": "sqlite:///testfiles/my_database.db", "table": "persons", "columns": {"first_name": "first_name", "last_name": "last_name"}}'
-```
-
-#### Using JOINed Database Tables
+##### Using JOIN'ed Database Tables
 
 For some more complicated where clauses, the table to be anonymized needs to be joined with another table.
 The target table (the one to be anonymized) is called `target_table`
@@ -321,9 +305,40 @@ python anonymizer.py \
 
 Without id column JOIN is currently not supported as the update command does not support JOINs.
 
-#### Json/XML Contained in Database Table Columns
 
-if a json string is contained in a database table, one can anonymize rows and json in columns at the same time:
+#### Database Tables without a unique id column
+
+As there is no unique id, the script cannot update row by row but needs to update all values in the selected columns. So a distinct set of values of the given column(s) are fetched, all values are anonymized and a single update is then executed for every distinct value to update all rows at once.
+
+This has the advantage that not for every row an update statement is executed (performance!), but has the severe drawback, that there is no "row-context" that can be referenced to set values.
+
+So you can easily set all rows having a first name of "Mike" and last name of "Smith" to its anonymized counterparts. But values are not replaced row by row, one cannot set the email address to "<firstname>.<lastname>@example.com"! One can anonymize the email column, but not with a jinja2 template using values from other columns!
+
+```bash
+rm testfiles/my_database.db
+# create test database:
+testfiles/create_sqlite.py testfiles/my_database.db
+
+# show content of db:
+sqlite3 testfiles/my_database.db "select * from persons"
+
+# anonymize db table
+python anonymizer.py \
+  --config '
+  {
+    "db_url": "sqlite:///testfiles/my_database.db", 
+    "table": "persons", 
+    "columns": {
+      "first_name": "first_name", 
+      "last_name": "last_name"
+    }
+  }
+'
+```
+
+#### JSON/XML Contained in Database Table Columns
+
+If a json string is contained in a database table, one can anonymize rows and json/xml content in columns at the same time defining the json columns by `json_column` and `xml_column`.
 
 ```bash
 # anonymize db table and json strings in the database
@@ -364,3 +379,4 @@ For MySql this seems to work (untested): `"mysql+pymysql://user:pass@host/test?c
   * [ ] union with other tables for where clause
   * [x] support multiple id columns
 * [ ] add counter, how many values were anonymized
+* [ ] multiple files using wildcards
