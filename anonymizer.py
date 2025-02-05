@@ -4,6 +4,7 @@ import argparse
 import json
 from faker import Faker
 from jinja2 import Template
+from time import perf_counter
 
 # Lazy imports
 try:
@@ -109,7 +110,7 @@ class DataAnonymizer:
 
         output_file = file_path if overwrite else file_path.replace(".csv", "_anonymized.csv")
         df.to_csv(output_file, sep=separator, index=False, encoding=self.encoding)
-        print(f"{len(df)} rows in  CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+        print(f"CSV file '{file_path}' anonymized {len(df)} rows. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
 
     def anonymize_json_string(self, json_string, json_paths):
@@ -123,14 +124,16 @@ class DataAnonymizer:
         except json.JSONDecodeError:
             return json_string  # Return unchanged if invalid JSON
 
+        count = 0
         for json_path, faker_or_template in json_paths.items():
             json_expr = json_parse(json_path)
             for match in json_expr.find(data):
                 originial_value = match.value
                 anonymized_value = self.anonymize_value(originial_value, faker_or_template)                    
                 match.full_path.update(data, anonymized_value)
+                count += 1
 
-        return json.dumps(data, ensure_ascii=False, indent=4)  # Return anonymized JSON string
+        return (count, json.dumps(data, ensure_ascii=False, indent=4))  # Return anonymized JSON string
 
 
     def anonymize_json_file(self, file_path, json_paths, overwrite=False):
@@ -142,14 +145,14 @@ class DataAnonymizer:
         with open(file_path, 'r', encoding=self.encoding) as file:
             json_string = file.read()
 
-        anonymized_json = self.anonymize_json_string(json_string, json_paths)
+        (count, anonymized_json) = self.anonymize_json_string(json_string, json_paths)
 
         output_file = file_path if overwrite else file_path.replace(".json", "_anonymized.json")
         with open(output_file, 'w', encoding=self.encoding) as file:
             file.write(anonymized_json)
 
 
-        print(f"JSON file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+        print(f"JSON file '{file_path}' anonymized {rows} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
     
 
     def anonymize_xml_string(self, xml_string, xml_paths):
@@ -164,6 +167,7 @@ class DataAnonymizer:
             print(f"Invalid XML!")
             return xml_string  # Return unchanged if invalid XML
 
+        count = 0
         for xpath, faker_or_template in xml_paths.items():
             if "@" in xpath:  # If XPath targets an attribute (e.g., //address/@id)
                 attr_xpath, attr_name = xpath.rsplit("/@", 1)
@@ -172,14 +176,16 @@ class DataAnonymizer:
                         originial_value = elem.get(attr_name)
                         anonymized_value = self.anonymize_value(originial_value, faker_or_template)
                         elem.set(attr_name, str(anonymized_value))  # Update the attribute value
+                        count += 1
 
             else:  # Normal text element anonymization
                 for elem in xml_tree.xpath(xpath):
                     originial_value = elem.text
                     anonymized_value = self.anonymize_value(originial_value, faker_or_template)
                     elem.text = str(anonymized_value)  # Update the element text
+                    count += 1
 
-        return etree.tostring(xml_tree, encoding=self.encoding).decode()  # Return anonymized XML string
+        return (count, etree.tostring(xml_tree, encoding=self.encoding).decode())  # Return anonymized XML string
 
     def anonymize_xml_file(self, file_path, xml_paths, overwrite=False):
         """Anonymizes an XML file using XPath for both element text and attributes."""
@@ -190,13 +196,13 @@ class DataAnonymizer:
         with open(file_path, 'r', encoding=self.encoding) as file:
             xml_string = file.read()
 
-        anonymized_xml = self.anonymize_xml_string(xml_string, xml_paths)
+        (count, anonymized_xml) = self.anonymize_xml_string(xml_string, xml_paths)
 
         output_file = file_path if overwrite else file_path.replace(".xml", "_anonymized.xml")
         with open(output_file, 'w', encoding=self.encoding) as file:
             file.write(anonymized_xml)
 
-        print(f"XML file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+        print(f"XML file '{file_path}' anonymized {count} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
     def parse_sqlalchemy_joins(self, engine, metadata, table_alias, join_definitions):
         """Parses join definitions from CLI into SQLAlchemy joins."""
@@ -230,10 +236,13 @@ class DataAnonymizer:
 
     def anonymize_db_table(self, db_url, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None):
         """Anonymizes a database table, including JSON and XML inside table columns."""
+        print(f"Anonymizing table '{table_name}'... ", flush=True, end="")
+
         if not create_engine:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
             return
         
+        start_time = perf_counter()
         engine = create_engine(db_url)
         metadata = MetaData()
         metadata.reflect(bind=engine)
@@ -255,7 +264,8 @@ class DataAnonymizer:
 
         session.commit()
         session.close()
-        print(f"{count} rows in table '{table_name}' anonymized successfully in database {db_url}.")
+        duration = perf_counter() - start_time
+        print(f"- anonymized {count} rows successfully in {duration:.2f} seconds")
 
     def anonymize_db_with_id_column(self, session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None):
         query = select(table)
@@ -279,23 +289,29 @@ class DataAnonymizer:
                     anonymized_values[col] = anonymized_value
 
             # JSON Column Anonymization
+            count_json = 0
             if json_columns:
                 for col, json_paths in json_columns.items():
                     if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid JSON string
-                        anonymized_values[col] = self.anonymize_json_string(row_dict[col], json_paths)
+                        (count, anonymized_json) = self.anonymize_json_string(row_dict[col], json_paths)
+                        anonymized_values[col] = anonymized_json
+                        count_json += count
 
             # XML Column Anonymization
+            count_xml = 0
             if xml_columns:
                 for col, xml_paths in xml_columns.items():
                     if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid XML string
-                        anonymized_values[col] = self.anonymize_xml_string(row_dict[col], xml_paths)
+                        (count, anonymized_xml) = self.anonymize_xml_string(row_dict[col], xml_paths)
+                        anonymized_values[col] = anonymized_xml
+                        count_xml += count
 
             if anonymized_values:
                 id_conditions = [update_table.c[id_col] == row_dict[id_col] for id_col in id_columns]
                 update_stmt = update(update_table).where(*id_conditions).values(**anonymized_values)
                 session.execute(update_stmt)
 
-        return len(rows)
+        return len(rows) + count_json + count_xml
 
 
     def anonymize_db_without_id_column(self, session, table, where_clause, join_conditions, columns_to_anonymize):
@@ -310,9 +326,9 @@ class DataAnonymizer:
             # Select all distinct values in the column
             distinct_values = session.execute(query).scalars().all()
             anonymized_map = {}
-            for orig_value in distinct_values:
+            for original_value in distinct_values:
                 anonymized_value = self.anonymize_value(original_value, faker_or_template)
-                anonymized_map[orig_value] = anonymized_value
+                anonymized_map[original_value] = anonymized_value
 
             # Update table with anonymized values
             for original_value, anonymized_value in anonymized_map.items():
@@ -407,7 +423,6 @@ For further details and examples, see the readme.md file!
                 print("Could not detect file type from the name. Supports *.csv, *.json and *.xml files!")
                 exit(-2)            
         elif "table" in config:
-            print(f"Anonymizing table '{config['table']}'...")
             if 'db_url' not in config:
                 print("Database anonymization needs 'db_url' set!")
                 exit(-1)

@@ -370,7 +370,7 @@ sqlite3 testfiles/my_database.db "select * from persons"
 python anonymizer.py \
   --config '
   {
-    "db_url": "sqlite:///testfiles/my_database.db"
+    "db_url": "sqlite:///testfiles/my_database.db",
     "table": "persons",
     "columns": {
       "first_name": "first_name",
@@ -749,7 +749,7 @@ Available Faker methods:
   * [x] tables without id column
   * [ ] union with other tables for where clause
   * [x] support multiple id columns
-* [ ] add counter, how many values were anonymized
+* [x] add counter, how many values were anonymized and duration of anonymization
 * [ ] multiple files using wildcards
 * [ ] support csv files without header
 * [ ] cache faker dictionaries, so one can anonymize across multiple runs!
