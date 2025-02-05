@@ -1,6 +1,37 @@
-# Anonymizer
+# Multi Anonymizer
 
-Allows to anonymize multiple fields in csv, json, xml or database tables in a consitent way.
+Allows to anonymize multiple fields in csv, json, xml files or database tables in a consistent way.
+The important thing is that the anonymization is replacing the same values with the same anonymized values in multiple files or tables! This means that for example a name like Sam Smith would be replaced across all files/tables with its anonymized value (like John Doe).
+
+The important thing is that for one run of the script, all values of the same type (last name, first name, postcode, etc.) will be anonymized with the same anonymized value. This ensured consistency across multiple data sources. This also means that you have to anonymize all sources in one run and cannot split it up across multiple invocations of the script!
+
+The following example shows how to anonymize a json and an xml file that both contain an addressbook with the same entries could be anonymizes, so that the same entries before will be equal (but anonymized) in the same way:
+
+```bash
+python anonymizer.py \
+  --config '
+  {
+    "file": "testfiles/persons.json",
+    "columns": {
+      "$.addressbook.person[*].firstname": "first_name",
+      "$.addressbook.person[*].lastname": "last_name",
+      "$.addressbook.person[*].comment": "{{ faker.sentence() }}",
+      "$.addressbook.person[*].address[*].id": {"type": "number", "params": {"min": 1000, "max": 2000}}
+    }
+  }
+' \
+'
+  {
+    "file": "testfiles/persons.xml",
+    "columns": {
+      "//person/firstname": "first_name",
+      "//person/lastname": "last_name",
+      "//person/comment": "{{ faker.sentence() }}",
+      "//address/@id": {"type": "number", "params": {"min": 1000, "max": 2000}}
+    }
+  }
+'
+```
 
 ## Setup
 
@@ -28,7 +59,11 @@ pip install lxml
 
 ## Usage
 
-Simple anonymization of first/last name. The script tries to anonymize data so the resemblance to the origial is a close as possible. So if there are two persons with the same last name in the csv file, they will get the same anonymized last name after anonymization! By default, the original source file is not modified, but a new file with the extended name `_anonymized` is created. Use `overwrite` to modify the original file.
+Simple anonymization of first/last name. The script tries to anonymize data so the resemblance to the origial is a close as possible. 
+
+### CSV Files
+
+So if there are two persons with the same last name in the csv file, they will get the same anonymized last name after anonymization! By default, the original source file is not modified, but a new file with the extended name `_anonymized` is created. Use `overwrite` to modify the original file.
 
 ```bash
 python anonymizer.py \
@@ -65,7 +100,6 @@ Use a number column and give min/max for the number - this form uses a different
 
 ```bash
 python anonymizer.py \
-  --locale de_DE \
   --config '
   {
     "file": "testfiles/persons.csv",
@@ -74,7 +108,7 @@ python anonymizer.py \
         "type": "number",
         "params": {
           "min": 18,
-          "max": 40
+          "max": 80
         }
       }
     },
@@ -171,7 +205,9 @@ python anonymizer.py \
     "file": "testfiles/persons.json",
     "columns": {
       "$.addressbook.person[*].firstname": "first_name",
-      "$.addressbook.person[*].lastname": "last_name"
+      "$.addressbook.person[*].lastname": "last_name",
+      "$.addressbook.person[*].comment": "{{ faker.sentence() }}",
+      "$.addressbook.person[*].address[*].id": {"type": "number", "params": {"min": 1000, "max": 2000}}
     }
   }
 '
@@ -326,10 +362,10 @@ sqlite3 testfiles/my_database.db "select * from persons"
 python anonymizer.py \
   --config '
   {
-    "db_url": "sqlite:///testfiles/my_database.db", 
-    "table": "persons", 
+    "db_url": "sqlite:///testfiles/my_database.db"
+    "table": "persons",
     "columns": {
-      "first_name": "first_name", 
+      "first_name": "first_name",
       "last_name": "last_name"
     }
   }
@@ -365,7 +401,7 @@ For database data, the encoding needs to be added to the database url. This is d
 
 For MySql this seems to work (untested): `"mysql+pymysql://user:pass@host/test?charset=utf8mb4"`
 
-## TODO
+## TODOs
 
 * [x] use faker calls in jinja2 expression (for example `{{ street }} {{ zip }} {{ town}}`)
 * [x] random numbers, min, max
@@ -380,3 +416,6 @@ For MySql this seems to work (untested): `"mysql+pymysql://user:pass@host/test?c
   * [x] support multiple id columns
 * [ ] add counter, how many values were anonymized
 * [ ] multiple files using wildcards
+* [ ] support csv files without header
+* [ ] cache faker dictionaries, so one can anonymize across multiple runs!
+  * keep language!

@@ -2,6 +2,7 @@
   <person>
     <lastname>Riegler</lastname>
     <firstname>Valentin</firstname>
+    <comment>Nice person</comment>
     <address id="123">
       <street>Martinshügel 123</street>
       <city>Linz</city>
@@ -18,6 +19,7 @@
   <person>
     <lastname>Auer</lastname>
     <firstname>Gabriel</firstname>
+    <comment></comment>
     <address id="125">
       <street>Wienerstrasse 80</street>
       <city>Graz</city>
@@ -31,4 +33,9 @@
       <country code="AT">Austria</country>
     </address>
   </person>
+  <person>
+    <lastname>Großbank GmbH</lastname>
+    <address id=""></address>
+  </person>
+
 </addressbook>

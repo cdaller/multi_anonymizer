@@ -24,7 +24,18 @@
             ]
         },
         {
-            "name": "Python: anonymizer.py sqlite",
+            "name": "Python: anonymizer.py CSV number type",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "anonymizer.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                " { \"file\": \"testfiles/persons.csv\", \"columns\": { \"age\": { \"type\": \"number\", \"params\": { \"min\": 18, \"max\": 40 } } }, \"separator\": \";\" }",
+            ]
+        },
+        {
+            "name": "Python: anonymizer.py sqlite (id column)",
             "type": "debugpy",
             "request": "launch",
             "program": "anonymizer.py",
@@ -32,6 +43,18 @@
             "args": [
                 "--config",
                 "{\"db_url\": \"sqlite:///testfiles/my_database.db\", \"table\": \"persons\", \"id_column\": \"id\", \"columns\": {\"first_name\": \"first_name\", \"last_name\": \"last_name\"}}"
+
+            ]
+        },
+        {
+            "name": "Python: anonymizer.py sqlite (no id column)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "anonymizer.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "{\"db_url\": \"sqlite:///testfiles/my_database.db\", \"table\": \"persons\", \"columns\": {\"first_name\": \"first_name\", \"last_name\": \"last_name\"}}"
 
             ]
         },
@@ -67,6 +90,17 @@
             "args": [
                 "--config",
                 "{\"file\": \"testfiles/persons.json\", \"columns\": {\"$.addressbook.person[*].firstname\": \"first_name\", \"$.addressbook.person[*].lastname\": \"last_name\"}}",
+            ]
+        },
+        {
+            "name": "Python: anonymizer.py JSON in database",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "anonymizer.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--config",
+                "{ \"db_url\": \"sqlite:///testfiles/my_database.db\", \"table\": \"persons\", \"id_column\": \"id\", \"columns\": {\"first_name\": \"first_name\", \"last_name\": \"last_name\"}, \"json_columns\": { \"json_data\": {  \"$.person.firstname\": \"first_name\",  \"$.person.lastname\": \"last_name\" } } }",
             ]
         },
         {

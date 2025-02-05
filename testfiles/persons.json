@@ -4,6 +4,7 @@
             {
                 "lastname": "Riegler",
                 "firstname": "Valentin",
+                "comment": "Nice person",
                 "address": [
                     {
                         "id": "123",
@@ -30,6 +31,7 @@
             {
                 "lastname": "Auer",
                 "firstname": "Gabriel",
+                "comment": "",
                 "address": [
                     {
                         "id": "125",

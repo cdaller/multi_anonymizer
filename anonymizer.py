@@ -57,7 +57,7 @@ class DataAnonymizer:
         if original_value is None:
             return None  # Keep None values as None
 
-        if original_value.strip() == "":
+        if isinstance(original_value, str) and original_value.strip() == "":
             return ""  # Keep empty strings as empty
 
         if faker_type not in self.faker_cache:
@@ -70,19 +70,29 @@ class DataAnonymizer:
         if faker_type == "number":
             min_val = kwargs.get("min", 0)
             max_val = kwargs.get("max", 100)
-            new_value = self.fake.random_int(min=min_val, max=max_val)
+            anonymized_value = self.fake.random_int(min=min_val, max=max_val)
         elif faker_type in self.faker_methods:
-            new_value = self.faker_methods[faker_type](**kwargs)
+            anonymized_value = self.faker_methods[faker_type](**kwargs)
         else:
-            new_value = f"INVALID_FAKER_METHOD({faker_type})"
+            anonymized_value = f"INVALID_FAKER_METHOD({faker_type})"
 
-        self.faker_cache[faker_type][original_value] = new_value
-        return new_value
+        self.faker_cache[faker_type][original_value] = anonymized_value
+        return anonymized_value
 
     
     def faker_proxy(self):
         """Return a dictionary of Faker functions that can be used in Jinja2 templates."""
         return {method: (lambda m=method: self.faker_methods[m]()) for method in self.faker_methods}
+
+    def anonymize_value(self, originial_value, faker_or_template, context={}):
+        if isinstance(faker_or_template, dict) and "type" in faker_or_template:
+            anonymized_value = self._get_consistent_faker_value(originial_value, faker_or_template["type"], **faker_or_template.get("params", {}))
+        elif faker_or_template in self.faker_methods:
+            anonymized_value = self._get_consistent_faker_value(originial_value, faker_or_template)
+        else:
+            template = Template(faker_or_template)
+            anonymized_value = template.render(faker=self.faker_proxy(), row=context) if originial_value not in [None, ""] else originial_value
+        return anonymized_value
 
 
     def anonymize_csv(self, file_path, columns_to_anonymize, overwrite=False, separator=","):
@@ -95,20 +105,12 @@ class DataAnonymizer:
 
         for col, faker_or_template in columns_to_anonymize.items():
             if col in df.columns:
-                if isinstance(faker_or_template, dict) and "type" in faker_or_template:
-                    df[col] = df[col].apply(lambda x: self._get_consistent_faker_value(
-                        x, faker_or_template["type"], **faker_or_template.get("params", {})
-                    ))
-                elif faker_or_template in self.faker_methods:
-                    df[col] = df[col].apply(lambda x: self._get_consistent_faker_value(x, faker_or_template))
-                else:
-                    template = Template(faker_or_template)
-                    df[col] = df.apply(lambda row: template.render(row=row.to_dict(), faker=self.faker_proxy())
-                                       if row[col] not in [None, ""] else row[col], axis=1)  # Preserve empty values
+                df[col] = df.apply(lambda row: self.anonymize_value(row[col], faker_or_template, row.to_dict()), axis=1)
 
         output_file = file_path if overwrite else file_path.replace(".csv", "_anonymized.csv")
         df.to_csv(output_file, sep=separator, index=False, encoding=self.encoding)
         print(f"CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+
 
 
     def anonymize_json_string(self, json_string, json_paths):
@@ -125,16 +127,9 @@ class DataAnonymizer:
         for json_path, faker_or_template in json_paths.items():
             json_expr = json_parse(json_path)
             for match in json_expr.find(data):
-                if isinstance(faker_or_template, dict) and "type" in faker_or_template:
-                    new_value = self._get_consistent_faker_value(
-                        match.value, faker_or_template["type"], **faker_or_template.get("params", {})
-                    )
-                elif faker_or_template in self.faker_methods:
-                    match.full_path.update(data, self._get_consistent_faker_value(match.value, faker_or_template))
-                else:
-                    template = Template(faker_or_template)
-                    new_value = template.render(faker=self.faker_proxy())
-                    match.full_path.update(data, new_value)
+                originial_value = match.value
+                anonymized_value = self.anonymize_value(originial_value, faker_or_template)                    
+                match.full_path.update(data, anonymized_value)
 
         return json.dumps(data, ensure_ascii=False, indent=4)  # Return anonymized JSON string
 
@@ -175,31 +170,17 @@ class DataAnonymizer:
                 attr_xpath, attr_name = xpath.rsplit("/@", 1)
                 for elem in xml_tree.xpath(attr_xpath):
                     if elem.get(attr_name) is not None:
-                        if isinstance(faker_or_template, dict) and "type" in faker_or_template:
-                            new_value = self._get_consistent_faker_value(
-                                elem.get(attr_name), faker_or_template["type"], **faker_or_template.get("params", {})
-                            )
-                        elif faker_or_template in self.faker_methods:
-                            new_value = self._get_consistent_faker_value(elem.get(attr_name), faker_or_template)
-                        else:
-                            template = Template(faker_or_template)
-                            new_value = template.render(faker=self.faker_proxy()) if elem.get(attr_name) not in [None, ""] else elem.get(attr_name)
-
-                        elem.set(attr_name, str(new_value))  # Update the attribute value
+                        originial_value = elem.get(attr_name)
+                        anonymized_value = self.anonymize_value(originial_value, faker_or_template)
+                        elem.set(attr_name, str(anonymized_value))  # Update the attribute value
 
             else:  # Normal text element anonymization
                 for elem in xml_tree.xpath(xpath):
-                    if isinstance(faker_or_template, dict) and "type" in faker_or_template:
-                        elem.text = self._get_consistent_faker_value(
-                            elem.text, faker_or_template["type"], **faker_or_template.get("params", {})
-                        )
-                    elif faker_or_template in self.faker_methods:
-                        elem.text = self._get_consistent_faker_value(elem.text, faker_or_template)
-                    else:
-                        template = Template(faker_or_template)
-                        elem.text = template.render(faker=self.faker_proxy()) if elem.text not in [None, ""] else elem.text
+                    originial_value = elem.text
+                    anonymized_value = self.anonymize_value(originial_value, faker_or_template)
+                    elem.text = str(anonymized_value)  # Update the element text
 
-        return etree.tostring(xml_tree, encoding=self.encoding).decode()  # ✅ Return anonymized XML string
+        return etree.tostring(xml_tree, encoding=self.encoding).decode()  # Return anonymized XML string
 
     def anonymize_xml_file(self, file_path, xml_paths, overwrite=False):
         """Anonymizes an XML file using XPath for both element text and attributes."""
@@ -284,39 +265,32 @@ class DataAnonymizer:
 
         for row in rows:
             row_dict = row._asdict()
-            new_values = {}
+            anonymized_values = {}
 
             # Standard column anonymization
             for col, faker_or_template in columns_to_anonymize.items():
                 if col in row_dict:
-                    if isinstance(faker_or_template, dict) and "type" in faker_or_template:
-                        # Handle "number" anonymization with min/max
-                        new_values[col] = self._get_consistent_faker_value(
-                            row_dict[col], faker_or_template["type"], **faker_or_template.get("params", {})
-                        )
-                    elif faker_or_template in self.faker_methods:
-                        new_values[col] = self._get_consistent_faker_value(row_dict[col], faker_or_template)
-                    else:
-                        # merge original row and already changed values - use this as a template context
-                        context = {**row_dict, **new_values}
-                        template = Template(faker_or_template)
-                        new_values[col] = template.render(row=context, faker=self.faker_proxy())
+                    original_value = row_dict[col]
+                    # merge original row and already changed values - use this as a template context
+                    context = {**row_dict, **anonymized_values}
+                    anonymized_value = self.anonymize_value(original_value, faker_or_template, context)
+                    anonymized_values[col] = anonymized_value
 
             # JSON Column Anonymization
             if json_columns:
                 for col, json_paths in json_columns.items():
                     if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid JSON string
-                        new_values[col] = self.anonymize_json_string(row_dict[col], json_paths)
+                        anonymized_values[col] = self.anonymize_json_string(row_dict[col], json_paths)
 
             # XML Column Anonymization
             if xml_columns:
                 for col, xml_paths in xml_columns.items():
                     if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid XML string
-                        new_values[col] = self.anonymize_xml_string(row_dict[col], xml_paths)
+                        anonymized_values[col] = self.anonymize_xml_string(row_dict[col], xml_paths)
 
-            if new_values:
+            if anonymized_values:
                 id_conditions = [table.c[id_col] == row_dict[id_col] for id_col in id_columns]
-                update_stmt = update(table).where(*id_conditions).values(**new_values)
+                update_stmt = update(table).where(*id_conditions).values(**anonymized_values)
                 session.execute(update_stmt)
 
 
@@ -332,16 +306,7 @@ class DataAnonymizer:
             distinct_values = session.execute(query).scalars().all()
             anonymized_map = {}
             for orig_value in distinct_values:
-                if isinstance(faker_or_template, dict) and "type" in faker_or_template:
-                    # Handle "number" anonymization with min/max
-                    anonymized_value = self._get_consistent_faker_value(
-                        orig_value, faker_or_template["type"], **faker_or_template.get("params", {})
-                    )
-                elif faker_or_template in self.faker_methods:
-                    anonymized_value = self._get_consistent_faker_value(orig_value, faker_or_template)
-                else:
-                    template = Template(faker_or_template)
-                    anonymized_value = template.render(row={}, faker=self.faker_proxy())
+                anonymized_value = self.anonymize_value(original_value, faker_or_template)
                 anonymized_map[orig_value] = anonymized_value
 
             # Update table with anonymized values
