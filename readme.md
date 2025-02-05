@@ -744,13 +744,14 @@ Available Faker methods:
 * [x] random numbers, min, max
 * [x] json/xml in database columns
 * [ ] xml: support namespaces
-* regexp: only anonymize part of the content
+* [ ] regexp: only anonymize part of the content
 * db
   * [x] table schema
   * [x] where clause for db
   * [x] tables without id column
   * [ ] union with other tables for where clause
   * [x] support multiple id columns
+  * [ ] only load columns that are used (to be anonymized or referenced!)
 * [x] add counter, how many values were anonymized and duration of anonymization
 * [ ] multiple files using wildcards
 * [ ] support csv files without header
