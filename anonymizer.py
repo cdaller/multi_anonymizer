@@ -109,8 +109,7 @@ class DataAnonymizer:
 
         output_file = file_path if overwrite else file_path.replace(".csv", "_anonymized.csv")
         df.to_csv(output_file, sep=separator, index=False, encoding=self.encoding)
-        print(f"CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
-
+        print(f"{len(df)} rows in  CSV file '{file_path}' anonymized. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
 
     def anonymize_json_string(self, json_string, json_paths):
@@ -246,16 +245,19 @@ class DataAnonymizer:
         # Parse and apply JOINs if provided
         join_conditions = self.parse_sqlalchemy_joins(engine, metadata, "target_table", joins)
 
+        count = 0
         if id_columns:
-            self.anonymize_db_with_id_column(session, table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns, xml_columns)
+            # workaround for sql server (cannot handle alias in update table query (and it is not needed anyway or tables with unique column ids))
+            update_table = Table(table_name, metadata, autoload_with=engine, schema=table_schema)
+            count = self.anonymize_db_with_id_column(session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns, xml_columns)
         else:
-           self.anonymize_db_without_id_column(session, table, where_clause, join_conditions, columns_to_anonymize)
+            count = self.anonymize_db_without_id_column(session, table, where_clause, join_conditions, columns_to_anonymize)
 
         session.commit()
         session.close()
-        print(f"Table '{table_name}' anonymized successfully in database {db_url}.")
+        print(f"{count} rows in table '{table_name}' anonymized successfully in database {db_url}.")
 
-    def anonymize_db_with_id_column(self, session, table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None):
+    def anonymize_db_with_id_column(self, session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None):
         query = select(table)
 
         self.add_joins(query, join_conditions)
@@ -289,12 +291,15 @@ class DataAnonymizer:
                         anonymized_values[col] = self.anonymize_xml_string(row_dict[col], xml_paths)
 
             if anonymized_values:
-                id_conditions = [table.c[id_col] == row_dict[id_col] for id_col in id_columns]
-                update_stmt = update(table).where(*id_conditions).values(**anonymized_values)
+                id_conditions = [update_table.c[id_col] == row_dict[id_col] for id_col in id_columns]
+                update_stmt = update(update_table).where(*id_conditions).values(**anonymized_values)
                 session.execute(update_stmt)
+
+        return len(rows)
 
 
     def anonymize_db_without_id_column(self, session, table, where_clause, join_conditions, columns_to_anonymize):
+        count = 0
         for column_name, faker_or_template in columns_to_anonymize.items():
             column = getattr(table.c, column_name)
             query = select(column).distinct()
@@ -318,10 +323,13 @@ class DataAnonymizer:
                     )
                 self.add_where_clause(update_stmt, where_clause)
 
-                session.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])    
+                result = session.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])
+                count += result.rowcount
                 #print(f'replaced {column_name}: {original_value} with {anonymized_value}')
 
             # TODO: add xml/json??? Does not make sense without id column???
+
+        return count
 
 
     def list_faker_methods(self):
@@ -375,10 +383,20 @@ For further details and examples, see the readme.md file!
         print("No configuration provided. Use --config or --list-faker-methods.")
         return
 
+    # test all configs
+    for config_str in args.config:
+        try:
+            config = json.loads(config_str)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON configuration: {e} in \n{config_str}")
+            exit(1)
+
+
     for config_str in args.config:
         config = json.loads(config_str)
 
         if "file" in config:
+            print(f"Anonymizing file '{config['file']}'...")
             if config["file"].endswith(".json"):
                 anonymizer.anonymize_json_file(config["file"], config["columns"], config.get("overwrite", False))
             elif config["file"].endswith(".xml"):
@@ -389,6 +407,7 @@ For further details and examples, see the readme.md file!
                 print("Could not detect file type from the name. Supports *.csv, *.json and *.xml files!")
                 exit(-2)            
         elif "table" in config:
+            print(f"Anonymizing table '{config['table']}'...")
             if 'db_url' not in config:
                 print("Database anonymization needs 'db_url' set!")
                 exit(-1)
