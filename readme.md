@@ -1,5 +1,7 @@
 # Multi Anonymizer
 
+This is a completely rewrite (new syntax, better configurability, more faker methods supported) of the anonymizer. For the old version, see readme in the archive folder [[archive/readme.md]].
+
 Allows to anonymize multiple fields in csv, json, xml files or database tables in a consistent way.
 The important thing is that the anonymization is replacing the same values with the same anonymized values in multiple files or tables! This means that for example a name like Sam Smith would be replaced across all files/tables with its anonymized value (like John Doe).
 
