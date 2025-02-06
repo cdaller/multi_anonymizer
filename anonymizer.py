@@ -3,6 +3,7 @@
 import argparse
 import json
 import re
+import logging
 from faker import Faker
 from jinja2 import Template
 from time import perf_counter
@@ -38,6 +39,11 @@ class DataAnonymizer:
         self.faker_methods = self._get_faker_methods()
         self.faker_cache = {}  # Cache for consistent faker values
         self.engine = None
+        self.sql_logger = logging.getLogger('sql')
+
+
+    def _setSqlLogLevel(self, level):
+        self.sql_logger.setLevel(level)
 
     def _get_faker_methods(self):
         """Fetch all available Faker methods, filtering out internal methods."""
@@ -228,6 +234,7 @@ class DataAnonymizer:
     def add_where_clause(self, query, where_clause):
         if where_clause:
             query = query.where(text(where_clause))
+        return query
     
     def add_joins(self, query, join_conditions):
         for alias, join_table, on_clause in join_conditions:
@@ -252,21 +259,21 @@ class DataAnonymizer:
         
         table = Table(table_name, metadata, autoload_with=engine, schema=table_schema).alias('target_table')
         Session = sessionmaker(bind=engine)
-        session = Session()
+        with Session() as session:
 
-        # Parse and apply JOINs if provided
-        join_conditions = self.parse_sqlalchemy_joins(engine, metadata, "target_table", joins)
+            # Parse and apply JOINs if provided
+            join_conditions = self.parse_sqlalchemy_joins(engine, metadata, "target_table", joins)
 
-        count = 0
-        if id_columns:
-            # workaround for sql server (cannot handle alias in update table query (and it is not needed anyway or tables with unique column ids))
-            update_table = Table(table_name, metadata, autoload_with=engine, schema=table_schema)
-            count = self.anonymize_db_with_id_column(session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns, xml_columns)
-        else:
-            count = self.anonymize_db_without_id_column(session, table, where_clause, join_conditions, columns_to_anonymize)
+            count = 0
+            if id_columns:
+                # workaround for sql server (cannot handle alias in update table query (and it is not needed anyway or tables with unique column ids))
+                update_table = Table(table_name, metadata, autoload_with=engine, schema=table_schema)
+                count = self.anonymize_db_with_id_column(session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns, xml_columns)
+            else:
+                count = self.anonymize_db_without_id_column(session, table, where_clause, join_conditions, columns_to_anonymize)
 
-        session.commit()
-        session.close()
+            session.commit()
+
         duration = perf_counter() - start_time
         print(f" DONE - anonymized {count} rows successfully in {duration:.2f} seconds")
 
@@ -292,7 +299,8 @@ class DataAnonymizer:
 
         self.add_joins(query, join_conditions)
 
-        self.add_where_clause(query, where_clause)
+        query = self.add_where_clause(query, where_clause) # FIXME: Where clause does not work!!!!!
+        self.sql_logger.debug(f"Executing query: {query}")
         rows = session.execute(query).fetchall()
 
         row_count = 0
@@ -347,7 +355,7 @@ class DataAnonymizer:
             column = getattr(table.c, column_name)
             query = select(column).distinct()
 
-            self.add_where_clause(query, where_clause)
+            query = self.add_where_clause(query, where_clause)
 
 
             # Select all distinct values in the column
@@ -364,7 +372,7 @@ class DataAnonymizer:
                         .where(table.c[column_name] == bindparam('orig_value'))
                         .values({column_name: bindparam('new_value')})
                     )
-                self.add_where_clause(update_stmt, where_clause)
+                update_stmt = self.add_where_clause(update_stmt, where_clause)
 
                 result = session.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])
                 count += result.rowcount
@@ -384,6 +392,8 @@ class DataAnonymizer:
 
 
 def main():
+    logging.basicConfig() # initializiation needed!!!!
+
     parser = argparse.ArgumentParser(
         description="Anonymize CSV, JSON, XML files, and database tables using Faker and Jinja2 templates.",
         epilog="""
@@ -414,6 +424,7 @@ For further details and examples, see the readme.md file!
     parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
     parser.add_argument("--encoding", type=str, default="utf-8", help="Set file/database encoding (default: utf-8)")
     parser.add_argument("--list-faker-methods", action="store_true", help="List all available Faker methods and exit.")
+    parser.add_argument('--debug-sql', dest='debug_sql', default = False, action='store_true', help='If enabled, prints sql statements. (default: %(default)d)')
 
     args = parser.parse_args()
 
@@ -425,6 +436,9 @@ For further details and examples, see the readme.md file!
     if not args.config:
         print("No configuration provided. Use --config or --list-faker-methods.")
         return
+
+    if args.debug_sql:
+        anonymizer._setSqlLogLevel(logging.DEBUG)
 
     try:
         # test all configs
@@ -477,6 +491,9 @@ For further details and examples, see the readme.md file!
     except KeyboardInterrupt:
         print("\nProcess interrupted. Exiting gracefully.")
         exit(0)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        exit(1)
 
 if __name__ == "__main__":
     main()
