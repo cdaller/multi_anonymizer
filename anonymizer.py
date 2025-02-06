@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from faker import Faker
 from jinja2 import Template
 from time import perf_counter
@@ -236,12 +237,14 @@ class DataAnonymizer:
 
     def anonymize_db_table(self, db_url, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None):
         """Anonymizes a database table, including JSON and XML inside table columns."""
-        print(f"Anonymizing table '{table_name}'... ", flush=True, end="")
+        table_full_name = f"{table_schema}.{table_name}" if table_schema else table_name
+        print(f"Anonymizing table '{table_full_name}'...", flush=True, end="")
 
         if not create_engine:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
             return
         
+        print(f" connecting...", end="", flush=True)
         start_time = perf_counter()
         engine = create_engine(db_url)
         metadata = MetaData()
@@ -265,16 +268,35 @@ class DataAnonymizer:
         session.commit()
         session.close()
         duration = perf_counter() - start_time
-        print(f"- anonymized {count} rows successfully in {duration:.2f} seconds")
+        print(f" DONE - anonymized {count} rows successfully in {duration:.2f} seconds")
+
+    def extract_column_names_from_template(self, template):
+        # Regular expression to extract keys inside row["..."] within Jinja2 curly braces
+        pattern = r'\{\{[^}]*?row\[(?:\"|\')(.+?)(?:\"|\')\][^}]*?\}\}'
+
+        # Find all matches
+        matches = re.findall(pattern, template)
+        return matches
 
     def anonymize_db_with_id_column(self, session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None):
         query = select(table)
+        
+        # which columns to load:
+        columns_to_load = set(id_columns)
+        for col, faker_or_template in columns_to_anonymize.items():
+            columns_to_load.add(col)
+            if isinstance(faker_or_template, str):
+                columns_to_load.update(self.extract_column_names_from_template(faker_or_template))
+
+        query = query.with_only_columns(*[table.c[col] for col in columns_to_load])
 
         self.add_joins(query, join_conditions)
 
         self.add_where_clause(query, where_clause)
         rows = session.execute(query).fetchall()
 
+        row_count = 0
+        print(f" processing {len(rows)} rows", end="", flush=True)
         for row in rows:
             row_dict = row._asdict()
             anonymized_values = {}
@@ -310,7 +332,12 @@ class DataAnonymizer:
                 id_conditions = [update_table.c[id_col] == row_dict[id_col] for id_col in id_columns]
                 update_stmt = update(update_table).where(*id_conditions).values(**anonymized_values)
                 session.execute(update_stmt)
+            
+            row_count += 1
+            if row_count % 1000 == 0:
+                print(f" {row_count}", end="", flush=True)
 
+        print(f" {row_count}", end="", flush=True)
         return len(rows) + count_json + count_xml
 
 
@@ -399,53 +426,57 @@ For further details and examples, see the readme.md file!
         print("No configuration provided. Use --config or --list-faker-methods.")
         return
 
-    # test all configs
-    for config_str in args.config:
-        try:
+    try:
+        # test all configs
+        for config_str in args.config:
+            try:
+                config = json.loads(config_str)
+            except json.JSONDecodeError as e:
+                print(f"Error parsing JSON configuration: {e} in \n{config_str}")
+                exit(1)
+
+
+        for config_str in args.config:
             config = json.loads(config_str)
-        except json.JSONDecodeError as e:
-            print(f"Error parsing JSON configuration: {e} in \n{config_str}")
-            exit(1)
 
+            if "file" in config:
+                print(f"Anonymizing file '{config['file']}'...")
+                if config["file"].endswith(".json"):
+                    anonymizer.anonymize_json_file(config["file"], config["columns"], config.get("overwrite", False))
+                elif config["file"].endswith(".xml"):
+                    anonymizer.anonymize_xml_file(config["file"], config["columns"], config.get("overwrite", False))
+                elif config["file"].endswith(".csv"):
+                    anonymizer.anonymize_csv(config["file"], config["columns"], config.get("overwrite", False), config.get("separator", ","))
+                else:
+                    print("Could not detect file type from the name. Supports *.csv, *.json and *.xml files!")
+                    exit(-2)            
+            elif "table" in config:
+                if 'db_url' not in config:
+                    print("Database anonymization needs 'db_url' set!")
+                    exit(-1)
 
-    for config_str in args.config:
-        config = json.loads(config_str)
+                id_columns = config.get("id_columns", [])
+                if "id_column" in config:
+                    id_columns.append(config["id_column"])
 
-        if "file" in config:
-            print(f"Anonymizing file '{config['file']}'...")
-            if config["file"].endswith(".json"):
-                anonymizer.anonymize_json_file(config["file"], config["columns"], config.get("overwrite", False))
-            elif config["file"].endswith(".xml"):
-                anonymizer.anonymize_xml_file(config["file"], config["columns"], config.get("overwrite", False))
-            elif config["file"].endswith(".csv"):
-                anonymizer.anonymize_csv(config["file"], config["columns"], config.get("overwrite", False), config.get("separator", ","))
-            else:
-                print("Could not detect file type from the name. Supports *.csv, *.json and *.xml files!")
-                exit(-2)            
-        elif "table" in config:
-            if 'db_url' not in config:
-                print("Database anonymization needs 'db_url' set!")
-                exit(-1)
+                table_joins = config.get("joins", [])
+                if "join" in config:
+                    table_joins.append(config["join"])
 
-            id_columns = config.get("id_columns", [])
-            if "id_column" in config:
-                id_columns.append(config["id_column"])
-
-            table_joins = config.get("joins", [])
-            if "join" in config:
-                table_joins.append(config["join"])
-
-            anonymizer.anonymize_db_table(
-                config["db_url"], 
-                config.get("schema", None), 
-                config["table"], 
-                id_columns, 
-                config.get("where", None), 
-                table_joins, 
-                config.get("columns", {}),
-                config.get("json_columns", {}),
-                config.get("xml_columns", {}),
-            )
+                anonymizer.anonymize_db_table(
+                    config["db_url"], 
+                    config.get("schema", None), 
+                    config["table"], 
+                    id_columns, 
+                    config.get("where", None), 
+                    table_joins, 
+                    config.get("columns", {}),
+                    config.get("json_columns", {}),
+                    config.get("xml_columns", {}),
+                )
+    except KeyboardInterrupt:
+        print("\nProcess interrupted. Exiting gracefully.")
+        exit(0)
 
 if __name__ == "__main__":
     main()

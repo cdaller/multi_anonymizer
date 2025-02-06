@@ -753,6 +753,7 @@ Available Faker methods:
   * [x] support multiple id columns
   * [ ] only load columns that are used (to be anonymized or referenced!)
 * [x] add counter, how many values were anonymized and duration of anonymization
+  * [ ] add progress info for lots of rows!
 * [ ] multiple files using wildcards
 * [ ] support csv files without header
 * [ ] cache faker dictionaries, so one can anonymize across multiple runs!
