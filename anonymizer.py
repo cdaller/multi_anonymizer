@@ -99,7 +99,8 @@ class DataAnonymizer:
             anonymized_value = self._get_consistent_faker_value(originial_value, faker_or_template)
         else:
             template = Template(faker_or_template)
-            anonymized_value = template.render(faker=self.faker_proxy(), row=context) if originial_value not in [None, ""] else originial_value
+            #print(f"original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
+            anonymized_value = template.render(faker=self.faker_proxy(), row=context) #if originial_value not in [None, ""] else originial_value
         return anonymized_value
 
 
@@ -158,8 +159,7 @@ class DataAnonymizer:
         with open(output_file, 'w', encoding=self.encoding) as file:
             file.write(anonymized_json)
 
-
-        print(f"JSON file '{file_path}' anonymized {rows} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+        print(f"JSON file '{file_path}' anonymized {count} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
     
 
     def anonymize_xml_string(self, xml_string, xml_paths):
@@ -383,11 +383,18 @@ class DataAnonymizer:
         return count
 
 
-    def list_faker_methods(self):
+    def list_faker_methods(self, with_example_values=True):
         """Print all available Faker methods and exit."""
         print("Available Faker methods:")
         for method in sorted(self.faker_methods.keys()):
-            print(f"- {method}")
+            if with_example_values:
+                try:
+                    example_value = self.faker_methods[method]() if method not in ["image", "tar", "xml", "zip"] and not method.startswith("py") else "N/A"
+                except TypeError:
+                    example_value = "N/A"
+                print(f"- {method}: {example_value}")
+            else:
+                print(f"- {method}")
         exit(0)
 
 
@@ -424,14 +431,15 @@ For further details and examples, see the readme.md file!
     parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
     parser.add_argument("--encoding", type=str, default="utf-8", help="Set file/database encoding (default: utf-8)")
     parser.add_argument("--list-faker-methods", action="store_true", help="List all available Faker methods and exit.")
+    parser.add_argument("--list-faker-methods-and-examples", action="store_true", help="List all available Faker methods including example values and exit.")
     parser.add_argument('--debug-sql', dest='debug_sql', default = False, action='store_true', help='If enabled, prints sql statements. (default: %(default)d)')
 
     args = parser.parse_args()
 
     anonymizer = DataAnonymizer(locale=args.locale, encoding=args.encoding)
 
-    if args.list_faker_methods:
-        anonymizer.list_faker_methods()
+    if args.list_faker_methods or args.list_faker_methods_and_examples:
+        anonymizer.list_faker_methods(args.list_faker_methods_and_examples)
 
     if not args.config:
         print("No configuration provided. Use --config or --list-faker-methods.")
@@ -478,7 +486,7 @@ For further details and examples, see the readme.md file!
                     table_joins.append(config["join"])
 
                 anonymizer.anonymize_db_table(
-                    config["db_url"], 
+                    config["db_url"],
                     config.get("schema", None), 
                     config["table"], 
                     id_columns, 
@@ -491,9 +499,9 @@ For further details and examples, see the readme.md file!
     except KeyboardInterrupt:
         print("\nProcess interrupted. Exiting gracefully.")
         exit(0)
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        exit(1)
+    # except Exception as e:
+    #     print(f"An error occurred: {e}")
+    #     exit(1)
 
 if __name__ == "__main__":
     main()

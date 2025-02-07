@@ -405,23 +405,21 @@ python anonymizer.py \
 
 #### Microsoft Sql Server
 
-Note: for Microsoft Sql Server you need to install the odbc driver (on Linux/Mac) and then pass the parameters url-encoded as odbc_connect query parameter:
+Note: for Microsoft Sql Server you need to install the odbc driver (on Linux/Mac) and then pass the parameters url-encoded as odbc_connect query parameter: `mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dtest-db%3BUID%3Dsa%3BPWD%3DDSmdM%40ORF1%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes"`
 
 ```bash
-DB_URL="mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dtest-db%3BUID%3Dsa%3BPWD%3DDSmdM%40ORF1%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes"
-
 python anonymizer.py \
   --locale de_DE \
   --config "
   {
-    \"db_url\": \"${DB_URL}\",
-    \"schema\": \"dbo_anon\",
-    \"table\": \"UserTest_\",
-    \"id_column\": \"userId\",
-    \"where\": \"companyId = 40201\",
-    \"columns\": {
-      \"firstName\": \"first_name\", 
-      \"lastName\": \"last_name\"
+    "db_url": "mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dtest-db%3BUID%3Dsa%3BPWD%3DDSmdM%40ORF1%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes",
+    "schema": "dbo_anon",
+    "table": "Users",
+    "id_column": "userId",
+    "where": "companyId = 40201",
+    "columns": {
+      "firstName": "first_name",
+      "lastName": "last_name"
     }
   }
   "
@@ -429,7 +427,8 @@ python anonymizer.py \
 
 The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor problems on MSSql!
 
-Please note that bash requires double quotes to expand the environment variable, but JSON also requires double quotes, so all double quotes need to be escaped in this example
+Please note that bash requires double quotes to expand the environment variable, but JSON also requires double quotes, so all double quotes need to be escaped in this example.
+
 
 ## Encoding
 
@@ -440,6 +439,8 @@ For database data, the encoding needs to be added to the database url. This is d
 For MySql this seems to work (untested): `"mysql+pymysql://user:pass@host/test?charset=utf8mb4"`
 
 ## Available Faker Methods
+
+The script is able to list all faker methods. If `--list-faker-methods-and-examples`is used, an example for the faker method is also printed. Set the `--locale` to get example values in a different locale.
 
 ```bash
 ./anonymizer.py --list-faker-methods
