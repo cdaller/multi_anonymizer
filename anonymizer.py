@@ -317,6 +317,8 @@ class DataAnonymizer:
         rows = session.execute(query).fetchall()
 
         row_count = 0
+        count_json = 0
+        count_xml = 0
         print(f" processing {len(rows)} rows", end="", flush=True)
         for row in rows:
             row_dict = row._asdict()
@@ -332,7 +334,6 @@ class DataAnonymizer:
                     anonymized_values[col] = anonymized_value
 
             # JSON Column Anonymization
-            count_json = 0
             if json_columns:
                 for col, json_paths in json_columns.items():
                     if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid JSON string
@@ -341,7 +342,6 @@ class DataAnonymizer:
                         count_json += count
 
             # XML Column Anonymization
-            count_xml = 0
             if xml_columns:
                 for col, xml_paths in xml_columns.items():
                     if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid XML string
