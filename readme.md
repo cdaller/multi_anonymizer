@@ -2,10 +2,13 @@
 
 This is a completely rewrite (new syntax, better configurability, more faker methods supported) of the anonymizer. For the old version, see readme in the archive folder [[archive/readme.md]].
 
-Allows to anonymize multiple fields in csv, json, xml files or database tables in a consistent way.
+Allows to anonymize multiple fields in csv, json, xml files or database tables in one pass and in a consistent way.
+
 The important thing is that the anonymization is replacing the same values with the same anonymized values in multiple files or tables! This means that for example a name like Sam Smith would be replaced across all files/tables with its anonymized value (like John Doe).
 
-The important thing is that for one run of the script, all values of the same type (last name, first name, postcode, etc.) will be anonymized with the same anonymized value. This ensured consistency across multiple data sources. This also means that you have to anonymize all sources in one run and cannot split it up across multiple invocations of the script!
+Please note that this is only valid for one run of the script: all values of the same type (last name, first name, postcode, etc.) will be anonymized with the same anonymized value. This ensured consistency across multiple data sources. This also means that you have to anonymize all sources in one run and cannot split it up across multiple invocations of the script!
+
+The configurations for the fields to anonymize are in json and can be passed via command line parameter (`--config`) or as a file (`--configfile`). Each config can contain one configuration definition or an array of configuration definitions.
 
 The following example shows how to anonymize a json and an xml file that both contain an addressbook with the same entries could be anonymizes, so that the same entries before will be equal (but anonymized) in the same way:
 

@@ -397,69 +397,7 @@ class DataAnonymizer:
                 print(f"- {method}")
         exit(0)
 
-
-def main():
-    logging.basicConfig() # initializiation needed!!!!
-
-    parser = argparse.ArgumentParser(
-        description="Anonymize CSV, JSON, XML files, and database tables using Faker and Jinja2 templates.",
-        epilog="""
-Examples:
-
-1. CSV file anonymization:
-   python anonymizer.py --config '{"file": "testfiles/persons.csv", "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row['firstname'].lower() }}.{{ row['lastname'].lower() }}@example.com" }, "overwrite": false, "separator": ";" }'
-
-2. JSON file anonymization:
-   python anonymizer.py --config '{"file": "testfiles/persons.json", "columns": {"$.addressbook.person[*].firstname": "first_name", "$.addressbook.person[*].lastname": "last_name"}}'
-
-3. XML file anonymization:
-   python anonymizer.py --config '{"file": "testfiles/persons.xml", "columns": {"//person/firstname": "first_name", "//person/lastname": "last_name"}}'
-
-4. Database table anonymization:
-   python anonymizer.py --config '{"db_url": "sqlite:///test.db", "table": "persons", "id_column": "id", "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row['firstname'].lower() }}.{{ row['lastname'].lower() }}@example.com" }, "json_columns": {"json_data": {"$.person.email": "email"}}}'
-   python anonymizer.py --config '{"db_url": "sqlite:///test.db", "table": "persons", "id_columns": ["id", "foobar"], "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row['firstname'].lower() }}.{{ row['lastname'].lower() }}@example.com" }, "json_columns": {"json_data": {"$.person.email": "email"}}}'
-
-5. List all available Faker methods:
-   python anonymizer.py --list-faker-methods
-
-For further details and examples, see the readme.md file!
-""",
-        formatter_class=argparse.RawTextHelpFormatter
-    )
-
-    parser.add_argument("--config", nargs="+", help="JSON configurations as command-line arguments.")
-    parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
-    parser.add_argument("--encoding", type=str, default="utf-8", help="Set file/database encoding (default: utf-8)")
-    parser.add_argument("--list-faker-methods", action="store_true", help="List all available Faker methods and exit.")
-    parser.add_argument("--list-faker-methods-and-examples", action="store_true", help="List all available Faker methods including example values and exit.")
-    parser.add_argument('--debug-sql', dest='debug_sql', default = False, action='store_true', help='If enabled, prints sql statements. (default: %(default)d)')
-
-    args = parser.parse_args()
-
-    anonymizer = DataAnonymizer(locale=args.locale, encoding=args.encoding)
-
-    if args.list_faker_methods or args.list_faker_methods_and_examples:
-        anonymizer.list_faker_methods(args.list_faker_methods_and_examples)
-
-    if not args.config:
-        print("No configuration provided. Use --config or --list-faker-methods.")
-        return
-
-    if args.debug_sql:
-        anonymizer._setSqlLogLevel(logging.DEBUG)
-
-    try:
-        # test all configs
-        for config_str in args.config:
-            try:
-                config = json.loads(config_str)
-            except json.JSONDecodeError as e:
-                print(f"Error parsing JSON configuration: {e} in \n{config_str}")
-                exit(1)
-
-
-        for config_str in args.config:
-            config = json.loads(config_str)
+    def process_config(self, config, anonymizer):
 
             if "file" in config:
                 print(f"Anonymizing file '{config['file']}'...")
@@ -496,12 +434,91 @@ For further details and examples, see the readme.md file!
                     config.get("json_columns", {}),
                     config.get("xml_columns", {}),
                 )
+
+
+
+def main():
+    logging.basicConfig() # initializiation needed!!!!
+
+    parser = argparse.ArgumentParser(
+        description="Anonymize CSV, JSON, XML files, and database tables using Faker and Jinja2 templates.",
+        epilog="""
+Examples:
+
+1. CSV file anonymization:
+   python anonymizer.py --config '{"file": "testfiles/persons.csv", "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row['firstname'].lower() }}.{{ row['lastname'].lower() }}@example.com" }, "overwrite": false, "separator": ";" }'
+
+2. JSON file anonymization:
+   python anonymizer.py --config '{"file": "testfiles/persons.json", "columns": {"$.addressbook.person[*].firstname": "first_name", "$.addressbook.person[*].lastname": "last_name"}}'
+
+3. XML file anonymization:
+   python anonymizer.py --config '{"file": "testfiles/persons.xml", "columns": {"//person/firstname": "first_name", "//person/lastname": "last_name"}}'
+
+4. Database table anonymization:
+   python anonymizer.py --config '{"db_url": "sqlite:///test.db", "table": "persons", "id_column": "id", "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row['firstname'].lower() }}.{{ row['lastname'].lower() }}@example.com" }, "json_columns": {"json_data": {"$.person.email": "email"}}}'
+   python anonymizer.py --config '{"db_url": "sqlite:///test.db", "table": "persons", "id_columns": ["id", "foobar"], "columns": {"firstname": "first_name", "lastname": "last_name", "email": "{{ row['firstname'].lower() }}.{{ row['lastname'].lower() }}@example.com" }, "json_columns": {"json_data": {"$.person.email": "email"}}}'
+
+5. List all available Faker methods:
+   python anonymizer.py --list-faker-methods
+
+For further details and examples, see the readme.md file!
+""",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    parser.add_argument("--config", nargs="+", help="JSON configurations as command-line arguments.")
+    parser.add_argument("--configfile", nargs="+", help="Paths to JSON configuration files.")
+    parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
+    parser.add_argument("--encoding", type=str, default="utf-8", help="Set file/database encoding (default: utf-8)")
+    parser.add_argument("--list-faker-methods", action="store_true", help="List all available Faker methods and exit.")
+    parser.add_argument("--list-faker-methods-and-examples", action="store_true", help="List all available Faker methods including example values and exit.")
+    parser.add_argument('--debug-sql', dest='debug_sql', default = False, action='store_true', help='If enabled, prints sql statements. (default: %(default)d)')
+
+    args = parser.parse_args()
+
+    anonymizer = DataAnonymizer(locale=args.locale, encoding=args.encoding)
+
+    if args.list_faker_methods or args.list_faker_methods_and_examples:
+        anonymizer.list_faker_methods(args.list_faker_methods_and_examples)
+
+    if not args.config and not args.configfile:
+        print("No configuration provided. Use --config/--configfile, or --list-faker-methods/--list-faker-methods-and-examples.")
+        return
+
+    if args.debug_sql:
+        anonymizer._setSqlLogLevel(logging.DEBUG)
+
+    try:
+        # test all configs
+        all_configs = args.config if args.config else []
+        if args.configfile:
+            for config_file in args.configfile:
+                try:
+                    with open(config_file, 'r', encoding=args.encoding) as file:
+                        all_configs.append(file.read())
+                except FileNotFoundError as e:
+                    print(f"Error reading configuration file: {e}")
+                    exit(1)
+
+        for config_str in all_configs:
+            try:
+                config = json.loads(config_str)
+                if isinstance(config, list):
+                    for single_config in config:
+                        anonymizer.process_config(single_config, anonymizer)
+                else:
+                    anonymizer.process_config(config, anonymizer)
+            except json.JSONDecodeError as e:
+                print(f"Error parsing JSON configuration: {e} in \n{config_str}")
+                exit(1)
+
     except KeyboardInterrupt:
         print("\nProcess interrupted. Exiting gracefully.")
         exit(0)
     # except Exception as e:
     #     print(f"An error occurred: {e}")
     #     exit(1)
+
 
 if __name__ == "__main__":
     main()
