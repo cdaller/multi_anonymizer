@@ -99,8 +99,15 @@ class DataAnonymizer:
             anonymized_value = self._get_consistent_faker_value(originial_value, faker_or_template)
         else:
             template = Template(faker_or_template)
-            #print(f"original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
-            anonymized_value = template.render(faker=self.faker_proxy(), row=context) #if originial_value not in [None, ""] else originial_value
+            #print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
+            # add utils that handle null values better than jinja2 methods
+            def empty_if_none(s):
+                return "" if s is None else s
+
+            def nvl(value, default):
+                return default if value is None else value
+
+            anonymized_value = template.render(faker=self.faker_proxy(), row=context, empty_if_none=empty_if_none, nvl=nvl)
         return anonymized_value
 
 

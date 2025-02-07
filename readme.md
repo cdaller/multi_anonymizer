@@ -329,6 +329,13 @@ python anonymizer.py \
   }'
 ```
 
+All jinja2 template syntax is supported. For convenience an additional function is available to handle null values better than the code above. Use `empty_if_none(row["firstName"]).lower()` to handle null values in the column `firstName` without jinja2 exception to the `lower()` method.
+
+The following utils functions are provided:
+
+* `empty_if_none(string)`: return an empty string in case of a `null` value
+* `nvl(string, default)`: returns the default in case of a `null` value
+
 ##### Using JOIN'ed Database Tables
 
 For some more complicated where clauses, the table to be anonymized needs to be joined with another table.
