@@ -768,4 +768,4 @@ Available Faker methods:
 * [ ] multiple files using wildcards
 * [ ] support csv files without header
 * [ ] cache faker dictionaries, so one can anonymize across multiple runs!
-  * keep language!
+  * include keep language!

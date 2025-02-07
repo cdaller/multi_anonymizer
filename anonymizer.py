@@ -293,7 +293,6 @@ class DataAnonymizer:
         return matches
 
     def anonymize_db_with_id_column(self, session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None):
-        query = select(table)
         
         # which columns to load:
         columns_to_load = set(id_columns)
@@ -302,6 +301,13 @@ class DataAnonymizer:
             if isinstance(faker_or_template, str):
                 columns_to_load.update(self.extract_column_names_from_template(faker_or_template))
 
+        # Check if all columns to load are valid columns of the table
+        table_columns = set(table.columns.keys())
+        invalid_columns = columns_to_load - table_columns
+        if invalid_columns:
+            raise ValueError(f"Invalid columns specified: {', '.join(invalid_columns)}")
+                
+        query = select(table)
         query = query.with_only_columns(*[table.c[col] for col in columns_to_load])
 
         self.add_joins(query, join_conditions)
@@ -522,9 +528,9 @@ For further details and examples, see the readme.md file!
     except KeyboardInterrupt:
         print("\nProcess interrupted. Exiting gracefully.")
         exit(0)
-    # except Exception as e:
-    #     print(f"An error occurred: {e}")
-    #     exit(1)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        exit(1)
 
 
 if __name__ == "__main__":
