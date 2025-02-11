@@ -8,7 +8,7 @@ The important thing is that the anonymization is replacing the same values with 
 
 Please note that this is only valid for one run of the script: all values of the same type (last name, first name, postcode, etc.) will be anonymized with the same anonymized value. This ensured consistency across multiple data sources. This also means that you have to anonymize all sources in one run and cannot split it up across multiple invocations of the script!
 
-The configurations for the fields to anonymize are in json and can be passed via command line parameter (`--config`) or as a file (`--configfile`). Each config can contain one configuration definition or an array of configuration definitions.
+The configurations for the fields to anonymize are in json and can be passed via command line parameter (`--config`) or as a file (`--config-file`). Each config can contain one configuration definition or an array of configuration definitions.
 
 The following example shows how to anonymize a json and an xml file that both contain an addressbook with the same entries could be anonymizes, so that the same entries before will be equal (but anonymized) in the same way:
 
@@ -329,13 +329,6 @@ python anonymizer.py \
   }'
 ```
 
-All jinja2 template syntax is supported. For convenience an additional function is available to handle null values better than the code above. Use `empty_if_none(row["firstName"]).lower()` to handle null values in the column `firstName` without jinja2 exception to the `lower()` method.
-
-The following utils functions are provided:
-
-* `empty_if_none(string)`: return an empty string in case of a `null` value
-* `nvl(string, default)`: returns the default in case of a `null` value
-
 ##### Using JOIN'ed Database Tables
 
 For some more complicated where clauses, the table to be anonymized needs to be joined with another table.
@@ -360,7 +353,6 @@ python anonymizer.py \
 ```
 
 Without id column JOIN is currently not supported as the update command does not support JOINs.
-
 
 #### Database Tables without a unique id column
 
@@ -415,7 +407,11 @@ python anonymizer.py \
 
 #### Microsoft Sql Server
 
-Note: for Microsoft Sql Server you need to install the odbc driver (on Linux/Mac) and then pass the parameters url-encoded as odbc_connect query parameter: `mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dtest-db%3BUID%3Dsa%3BPWD%3DDSmdM%40ORF1%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes"`
+Note: for Microsoft Sql Server you need to install the odbc driver (on Linux/Mac) and then pass the parameters url-encoded as odbc_connect query parameter: 
+
+```
+mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dtest-db%3BUID%3Dsa%3BPWD%3DDSmdM%40ORF1%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes"
+```
 
 ```bash
 python anonymizer.py \
@@ -440,6 +436,14 @@ The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor
 Please note that bash requires double quotes to expand the environment variable, but JSON also requires double quotes, so all double quotes need to be escaped in this example.
 
 
+## Config Files
+
+Instead of passing multiple config files on the comman line, it might be easier to define the configuration(s) in one or multiple files.
+
+## Special jinja2 Mechanism
+
+If a jinja2 template returns the string `"None"`, it is replaced by `None` (`null` value). Otherwise it would be impossible to set a (database column) value to `null`.
+
 ## Encoding
 
 For xml, csv and json files, use the `--encoding` command line parameter to set the encoding, the files are read and written.
@@ -447,6 +451,14 @@ For xml, csv and json files, use the `--encoding` command line parameter to set 
 For database data, the encoding needs to be added to the database url. This is dependent on the database.
 
 For MySql this seems to work (untested): `"mysql+pymysql://user:pass@host/test?charset=utf8mb4"`
+
+## Consistency across multiple runs
+
+If consistency across multiple runs should be achieved, the mapping between original values and anonymized values can be exported at the end of an anonymization run and imported at the beginning of the next using the `--cache-file` parameter. This will import/export a json file. Please not that the locale should be coded into the filename to not mixup the mapping between different anonymization runs.
+
+```bash
+ ./anonymizer.py --locale de_AT --config-file db_anonymization.json --cache-file database_anonymization_de_AT.json
+ ```
 
 ## Available Faker Methods
 
@@ -764,8 +776,8 @@ Available Faker methods:
   * [x] support multiple id columns
   * [ ] only load columns that are used (to be anonymized or referenced!)
 * [x] add counter, how many values were anonymized and duration of anonymization
-  * [ ] add progress info for lots of rows!
+  * [x] add progress info for lots of rows!
 * [ ] multiple files using wildcards
 * [ ] support csv files without header
-* [ ] cache faker dictionaries, so one can anonymize across multiple runs!
-  * include keep language!
+* [x] cache faker dictionaries, so one can anonymize across multiple runs!
+  * include keep language (set in filename)

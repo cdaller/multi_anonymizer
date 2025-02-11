@@ -3,6 +3,7 @@
 import argparse
 import json
 import re
+import os
 import logging
 from faker import Faker
 from jinja2 import Template
@@ -32,18 +33,45 @@ except ImportError:
 
 
 class DataAnonymizer:
-    def __init__(self, db_url=None, locale="en_US", encoding="utf-8"):
+    def __init__(self, db_url=None, locale="en_US", encoding="utf-8", cache_file=None):
         """Initialize the anonymizer with a database connection (if provided) and locale."""
         self.fake = Faker(locale)
         self.encoding = encoding
         self.faker_methods = self._get_faker_methods()
         self.faker_cache = {}  # Cache for consistent faker values
+        self.cache_file = cache_file
         self.engine = None
         self.sql_logger = logging.getLogger('sql')
+
+        # Load cache file if provided
+        if self.cache_file:
+            self._load_cache()
 
 
     def _setSqlLogLevel(self, level):
         self.sql_logger.setLevel(level)
+
+    def _load_cache(self):
+        """Loads the faker cache from a file if it exists."""
+        if self.cache_file and os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, "r", encoding="utf-8") as file:
+                    self.faker_cache = json.load(file)
+                print(f"Loaded faker cache from '{self.cache_file}' ({sum(len(v) for v in self.faker_cache.values())} entries)")
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to load faker cache from '{self.cache_file}': {e}")
+                self.faker_cache = {}
+
+    def _save_cache(self):
+        """Saves the faker cache to a file at the end of execution."""
+        if self.cache_file:
+            try:
+                with open(self.cache_file, "w", encoding="utf-8") as file:
+                    json.dump(self.faker_cache, file, indent=4, ensure_ascii=False)
+                print(f"Faker cache saved to '{self.cache_file}' ({sum(len(v) for v in self.faker_cache.values())} entries)")
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to save faker cache to '{self.cache_file}': {e}")
+
 
     def _get_faker_methods(self):
         """Fetch all available Faker methods, filtering out internal methods."""
@@ -101,13 +129,9 @@ class DataAnonymizer:
             template = Template(faker_or_template)
             #print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
             # add utils that handle null values better than jinja2 methods
-            def empty_if_none(s):
-                return "" if s is None else s
-
-            def nvl(value, default):
-                return default if value is None else value
-
-            anonymized_value = template.render(faker=self.faker_proxy(), row=context, empty_if_none=empty_if_none, nvl=nvl)
+            anonymized_value = template.render(faker=self.faker_proxy(), row=context)
+            if anonymized_value == "None":
+                anonymized_value = None
         return anonymized_value
 
 
@@ -296,6 +320,8 @@ class DataAnonymizer:
         
         # which columns to load:
         columns_to_load = set(id_columns)
+        columns_to_load.update(json_columns.keys() if json_columns else [])
+        columns_to_load.update(xml_columns.keys() if json_columns else [])
         for col, faker_or_template in columns_to_anonymize.items():
             columns_to_load.add(col)
             if isinstance(faker_or_template, str):
@@ -412,41 +438,48 @@ class DataAnonymizer:
 
     def process_config(self, config, anonymizer):
 
-            if "file" in config:
-                print(f"Anonymizing file '{config['file']}'...")
-                if config["file"].endswith(".json"):
-                    anonymizer.anonymize_json_file(config["file"], config["columns"], config.get("overwrite", False))
-                elif config["file"].endswith(".xml"):
-                    anonymizer.anonymize_xml_file(config["file"], config["columns"], config.get("overwrite", False))
-                elif config["file"].endswith(".csv"):
-                    anonymizer.anonymize_csv(config["file"], config["columns"], config.get("overwrite", False), config.get("separator", ","))
-                else:
-                    print("Could not detect file type from the name. Supports *.csv, *.json and *.xml files!")
-                    exit(-2)            
-            elif "table" in config:
-                if 'db_url' not in config:
-                    print("Database anonymization needs 'db_url' set!")
-                    exit(-1)
+        if "enabled" in config and not config["enabled"]:
+            print("Config disabled. Skipping...")
+            return
 
-                id_columns = config.get("id_columns", [])
-                if "id_column" in config:
-                    id_columns.append(config["id_column"])
+        if "file" in config:
+            print(f"Anonymizing file '{config['file']}'...")
+            if config["file"].endswith(".json"):
+                anonymizer.anonymize_json_file(config["file"], config["columns"], config.get("overwrite", False))
+            elif config["file"].endswith(".xml"):
+                anonymizer.anonymize_xml_file(config["file"], config["columns"], config.get("overwrite", False))
+            elif config["file"].endswith(".csv"):
+                anonymizer.anonymize_csv(config["file"], config["columns"], config.get("overwrite", False), config.get("separator", ","))
+            else:
+                print("Could not detect file type from the name. Supports *.csv, *.json and *.xml files!")
+                exit(-2)            
+        elif "table" in config:
+            if 'db_url' not in config:
+                print("Database anonymization needs 'db_url' set!")
+                exit(-1)
 
-                table_joins = config.get("joins", [])
-                if "join" in config:
-                    table_joins.append(config["join"])
+            id_columns = config.get("id_columns", [])
+            if "id_column" in config:
+                id_columns.append(config["id_column"])
 
-                anonymizer.anonymize_db_table(
-                    config["db_url"],
-                    config.get("schema", None), 
-                    config["table"], 
-                    id_columns, 
-                    config.get("where", None), 
-                    table_joins, 
-                    config.get("columns", {}),
-                    config.get("json_columns", {}),
-                    config.get("xml_columns", {}),
-                )
+            table_joins = config.get("joins", [])
+            if "join" in config:
+                table_joins.append(config["join"])
+
+            anonymizer.anonymize_db_table(
+                config["db_url"],
+                config.get("schema", None), 
+                config["table"], 
+                id_columns, 
+                config.get("where", None), 
+                table_joins, 
+                config.get("columns", {}),
+                config.get("json_columns", {}),
+                config.get("xml_columns", {}),
+            )
+        
+        # Save the faker cache at the end
+        anonymizer._save_cache()
 
 
 
@@ -480,21 +513,22 @@ For further details and examples, see the readme.md file!
     )
 
     parser.add_argument("--config", nargs="+", help="JSON configurations as command-line arguments.")
-    parser.add_argument("--configfile", nargs="+", help="Paths to JSON configuration files.")
+    parser.add_argument("--config-file", nargs="+", help="Paths to JSON configuration files.")
     parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
     parser.add_argument("--encoding", type=str, default="utf-8", help="Set file/database encoding (default: utf-8)")
     parser.add_argument("--list-faker-methods", action="store_true", help="List all available Faker methods and exit.")
     parser.add_argument("--list-faker-methods-and-examples", action="store_true", help="List all available Faker methods including example values and exit.")
     parser.add_argument('--debug-sql', dest='debug_sql', default = False, action='store_true', help='If enabled, prints sql statements. (default: %(default)d)')
+    parser.add_argument("--cache-file", type=str, help="Set a file to store and reuse Faker anonymized values.")
 
     args = parser.parse_args()
 
-    anonymizer = DataAnonymizer(locale=args.locale, encoding=args.encoding)
+    anonymizer = DataAnonymizer(locale=args.locale, encoding=args.encoding, cache_file=args.cache_file)
 
     if args.list_faker_methods or args.list_faker_methods_and_examples:
         anonymizer.list_faker_methods(args.list_faker_methods_and_examples)
 
-    if not args.config and not args.configfile:
+    if not args.config and not args.config_file:
         print("No configuration provided. Use --config/--configfile, or --list-faker-methods/--list-faker-methods-and-examples.")
         return
 
@@ -504,8 +538,8 @@ For further details and examples, see the readme.md file!
     try:
         # test all configs
         all_configs = args.config if args.config else []
-        if args.configfile:
-            for config_file in args.configfile:
+        if args.config_file:
+            for config_file in args.config_file:
                 try:
                     with open(config_file, 'r', encoding=args.encoding) as file:
                         all_configs.append(file.read())
