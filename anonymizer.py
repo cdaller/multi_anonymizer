@@ -288,7 +288,7 @@ class DataAnonymizer:
         start_time = perf_counter()
         engine = create_engine(db_url)
         metadata = MetaData()
-        metadata.reflect(bind=engine)
+        # no need to load whole database table definitions! metadata.reflect(bind=engine)
         
         table = Table(table_name, metadata, autoload_with=engine, schema=table_schema).alias('target_table')
         Session = sessionmaker(bind=engine)
