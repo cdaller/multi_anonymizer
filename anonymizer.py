@@ -42,14 +42,11 @@ class DataAnonymizer:
         self.cache_file = cache_file
         self.engine = None
         self.sql_logger = logging.getLogger('sql')
+        self.json_logger = logging.getLogger('json')
 
         # Load cache file if provided
         if self.cache_file:
             self._load_cache()
-
-
-    def _setSqlLogLevel(self, level):
-        self.sql_logger.setLevel(level)
 
     def _load_cache(self):
         """Loads the faker cache from a file if it exists."""
@@ -118,7 +115,7 @@ class DataAnonymizer:
     
     def faker_proxy(self):
         """Return a dictionary of Faker functions that can be used in Jinja2 templates."""
-        return {method: (lambda m=method: self.faker_methods[m]()) for method in self.faker_methods}
+        return {method: (lambda *args, m=method, **kwargs: self.faker_methods[m](*args, **kwargs)) for method in self.faker_methods}
 
     def anonymize_value(self, originial_value, faker_or_template, context={}):
         if isinstance(faker_or_template, dict) and "type" in faker_or_template:
@@ -129,7 +126,7 @@ class DataAnonymizer:
             template = Template(faker_or_template)
             #print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
             # add utils that handle null values better than jinja2 methods
-            anonymized_value = template.render(faker=self.faker_proxy(), row=context)
+            anonymized_value = template.render(faker=self.faker_proxy(), row=context, re=re, str=str, int=int, len=len)
             if anonymized_value == "None":
                 anonymized_value = None
         return anonymized_value
@@ -160,13 +157,18 @@ class DataAnonymizer:
 
         try:
             data = json.loads(json_string)
-        except json.JSONDecodeError:
-            return json_string  # Return unchanged if invalid JSON
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON configuration: {e} in \n{json_string}")
+            exit(1)
 
         count = 0
         for json_path, faker_or_template in json_paths.items():
             json_expr = json_parse(json_path)
-            for match in json_expr.find(data):
+            matches = json_expr.find(data)
+            if len(matches) == 0:
+                self.json_logger.info(f"JSONPath '{json_path}' not found in JSON data - skipping.")
+                self.json_logger.debug(f"in json string: {json_string}")
+            for match in matches:
                 originial_value = match.value
                 anonymized_value = self.anonymize_value(originial_value, faker_or_template)                    
                 match.full_path.update(data, anonymized_value)
@@ -336,16 +338,16 @@ class DataAnonymizer:
         query = select(table)
         query = query.with_only_columns(*[table.c[col] for col in columns_to_load])
 
-        self.add_joins(query, join_conditions)
+        query = self.add_joins(query, join_conditions)
 
-        query = self.add_where_clause(query, where_clause) # FIXME: Where clause does not work!!!!!
+        query = self.add_where_clause(query, where_clause)
         self.sql_logger.debug(f"Executing query: {query}")
         rows = session.execute(query).fetchall()
 
         row_count = 0
         count_json = 0
         count_xml = 0
-        print(f" processing {len(rows)} rows", end="", flush=True)
+        print(f" processing {len(rows)} rows..", end="", flush=True)
         for row in rows:
             row_dict = row._asdict()
             anonymized_values = {}
@@ -363,6 +365,7 @@ class DataAnonymizer:
             if json_columns:
                 for col, json_paths in json_columns.items():
                     if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid JSON string
+                        self.json_logger.debug(f"Working on json in row { {id_col: row_dict.get(id_col) for id_col in id_columns} }")
                         (count, anonymized_json) = self.anonymize_json_string(row_dict[col], json_paths)
                         anonymized_values[col] = anonymized_json
                         count_json += count
@@ -381,10 +384,11 @@ class DataAnonymizer:
                 session.execute(update_stmt)
             
             row_count += 1
-            if row_count % 1000 == 0:
-                print(f" {row_count}", end="", flush=True)
+            percent = int((row_count / len(rows)) * 100)
+            if row_count == len(rows) or (percent % 5 == 0 and percent != int(((row_count - 1) / len(rows)) * 100)):
+                print(f"{percent}%..", end="", flush=True)
 
-        print(f" {row_count}", end="", flush=True)
+        print(f" {row_count} rows ", end="", flush=True)
         return len(rows) + count_json + count_xml
 
 
@@ -428,7 +432,7 @@ class DataAnonymizer:
         for method in sorted(self.faker_methods.keys()):
             if with_example_values:
                 try:
-                    example_value = self.faker_methods[method]() if method not in ["image", "tar", "xml", "zip"] and not method.startswith("py") else "N/A"
+                    example_value = self.faker_methods[method]() if method not in ["binary", "get_providers", "image", "items", "tar", "xml", "zip"] and not method.startswith("py") else "<skipped>"
                 except TypeError:
                     example_value = "N/A"
                 print(f"- {method}: {example_value}")
@@ -519,6 +523,7 @@ For further details and examples, see the readme.md file!
     parser.add_argument("--list-faker-methods", action="store_true", help="List all available Faker methods and exit.")
     parser.add_argument("--list-faker-methods-and-examples", action="store_true", help="List all available Faker methods including example values and exit.")
     parser.add_argument('--debug-sql', dest='debug_sql', default = False, action='store_true', help='If enabled, prints sql statements. (default: %(default)d)')
+    parser.add_argument('--debug-json', dest='debug_json', default = False, action='store_true', help='If enabled, prints json infos. (default: %(default)d)')
     parser.add_argument("--cache-file", type=str, help="Set a file to store and reuse Faker anonymized values.")
 
     args = parser.parse_args()
@@ -533,8 +538,10 @@ For further details and examples, see the readme.md file!
         return
 
     if args.debug_sql:
-        anonymizer._setSqlLogLevel(logging.DEBUG)
-
+        anonymizer.sql_logger.setLevel(logging.DEBUG)
+    if args.debug_json:
+        anonymizer.json_logger.setLevel(logging.DEBUG)
+        
     try:
         # test all configs
         all_configs = args.config if args.config else []

@@ -781,3 +781,5 @@ Available Faker methods:
 * [ ] support csv files without header
 * [x] cache faker dictionaries, so one can anonymize across multiple runs!
   * include keep language (set in filename)
+* json
+  * [ ] allow references to other json_path elements (like row['xy'])
