@@ -308,7 +308,7 @@ class DataAnonymizer:
             session.commit()
 
         duration = perf_counter() - start_time
-        print(f" DONE - anonymized {count} rows successfully in {duration:.2f} seconds")
+        print(f" DONE - anonymized {count} rows/values successfully in {duration:.2f} seconds")
 
     def extract_column_names_from_template(self, template):
         # Regular expression to extract keys inside row["..."] within Jinja2 curly braces
@@ -344,10 +344,12 @@ class DataAnonymizer:
         self.sql_logger.debug(f"Executing query: {query}")
         rows = session.execute(query).fetchall()
 
+        count_result = {}
+
         row_count = 0
         count_json = 0
         count_xml = 0
-        print(f" processing {len(rows)} rows..", end="", flush=True)
+        print(f" processing {len(rows)} rows ..", end="", flush=True)
         for row in rows:
             row_dict = row._asdict()
             anonymized_values = {}
@@ -389,7 +391,12 @@ class DataAnonymizer:
                 print(f"{percent}%..", end="", flush=True)
 
         print(f" {row_count} rows ", end="", flush=True)
-        return len(rows) + count_json + count_xml
+        count_result['rows'] = row_count
+        if count_json > 0:
+            count_result['json_values'] = count_json
+        if count_xml > 0:
+            count_result['xml_values'] = count_xml 
+        return count_result
 
 
     def anonymize_db_without_id_column(self, session, table, where_clause, join_conditions, columns_to_anonymize):
@@ -423,7 +430,7 @@ class DataAnonymizer:
 
             # TODO: add xml/json??? Does not make sense without id column???
 
-        return count
+        return { "rows": count }
 
 
     def list_faker_methods(self, with_example_values=True):
