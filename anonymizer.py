@@ -104,6 +104,10 @@ class DataAnonymizer:
             min_val = kwargs.get("min", 0)
             max_val = kwargs.get("max", 100)
             anonymized_value = self.fake.random_int(min=min_val, max=max_val)
+        elif faker_type == "zip_city":
+            min_val = kwargs.get("min", 0)
+            max_val = kwargs.get("max", 100)
+            anonymized_value = self.fake.random_int(min=min_val, max=max_val)
         elif faker_type in self.faker_methods:
             anonymized_value = self.faker_methods[faker_type](**kwargs)
         else:
@@ -383,6 +387,7 @@ class DataAnonymizer:
             if anonymized_values:
                 id_conditions = [update_table.c[id_col] == row_dict[id_col] for id_col in id_columns]
                 update_stmt = update(update_table).where(*id_conditions).values(**anonymized_values)
+                #self.sql_logger.debug(f"Executing update: {update_stmt}")
                 session.execute(update_stmt)
             
             row_count += 1
