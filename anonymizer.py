@@ -44,6 +44,9 @@ class DataAnonymizer:
         self.sql_logger = logging.getLogger('sql')
         self.json_logger = logging.getLogger('json')
 
+        self.env_context = {"env": {key: value for key, value in os.environ.items()}}
+
+
         # Load cache file if provided
         if self.cache_file:
             self._load_cache()
@@ -128,13 +131,20 @@ class DataAnonymizer:
             anonymized_value = self._get_consistent_faker_value(originial_value, faker_or_template)
         else:
             template = Template(faker_or_template)
-            #print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
+            # print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
             # add utils that handle null values better than jinja2 methods
-            anonymized_value = template.render(faker=self.faker_proxy(), row=context, re=re, str=str, int=int, len=len)
+            anonymized_value = template.render(faker=self.faker_proxy(), row=context, re=re, str=str, int=int, len=len, **self.env_context)
             if anonymized_value == "None":
                 anonymized_value = None
         return anonymized_value
 
+    def eval_template_with_environment(self, template):
+        """Evaluates a Jinja2 template with environment variables."""
+        return self.eval_template(template, context=self.env_context)
+
+    def eval_template(self, template, context={}):
+        """Evaluates a Jinja2 template with the provided context."""
+        return Template(template).render(**context)
 
     def anonymize_csv(self, file_path, columns_to_anonymize, overwrite=False, separator=","):
         """Anonymizes a CSV file using Faker and Jinja2 templates."""
@@ -256,15 +266,19 @@ class DataAnonymizer:
         for join_def in join_definitions:
             try:
                 table_name, alias, on_clause = join_def.split(" ", 2)  # Split into parts
+                if "." in table_name:  # Handle schema.table format
+                    schema_name, table_name = table_name.split(".", 1)
+                else:
+                    schema_name = None
                 on_clause = on_clause.replace("ON ", "").strip()  # Remove "ON" prefix
 
-                # print(f"Joining {table_alias} with {table_name} ON {on_clause}")
+                #print(f"Joining {table_alias} with {schema_name + '.' or ''}{table_name} alias '{alias}' ON '{on_clause}'")
 
-                join_table = Table(table_name, metadata, autoload_with=engine).alias(alias)
+                join_table = Table(table_name, metadata, schema=schema_name, autoload_with=engine).alias(alias)
                 join_tables[alias] = join_table
                 join_conditions.append((alias, join_table, on_clause))
-            except ValueError:
-                raise ValueError(f"Invalid join format: {join_def}. Expected format: '<table> <alias> ON <condition>'")
+            except ValueError as e:
+                raise ValueError(f"Invalid join format: {join_def}. Expected format: '<table/view> <alias> ON <condition>': {str(e)}")
 
         return join_conditions
     
@@ -293,11 +307,12 @@ class DataAnonymizer:
         engine = create_engine(db_url)
         metadata = MetaData()
         # no need to load whole database table definitions! metadata.reflect(bind=engine)
-        
+                
         table = Table(table_name, metadata, autoload_with=engine, schema=table_schema)
         if len(joins) > 0:
             # some sql servers do not support alias names on updates! So use them only if necessary (when using joins)
             table = table.alias('target_table')
+
         Session = sessionmaker(bind=engine)
         with Session() as session:
 
@@ -306,8 +321,9 @@ class DataAnonymizer:
 
             count = 0
             if id_columns:
+                # workaround for sql servers that do not support alias names in update statements (and as id column is used, it is not needed for update statement!)
                 update_table = Table(table_name, metadata, autoload_with=engine, schema=table_schema)
-                count = self.anonymize_db_with_id_column(session, table, table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns, xml_columns)
+                count = self.anonymize_db_with_id_column(session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns, xml_columns)
             else:
                 count = self.anonymize_db_without_id_column(session, table, where_clause, join_conditions, columns_to_anonymize)
 
@@ -325,7 +341,6 @@ class DataAnonymizer:
         return matches
 
     def anonymize_db_with_id_column(self, session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None):
-        
         # which columns to load:
         columns_to_load = set(id_columns)
         columns_to_load.update(json_columns.keys() if json_columns else [])
@@ -488,13 +503,22 @@ class DataAnonymizer:
             if "table" in config:
                 table_list.append(config["table"])
 
+            # handle jinja2 templates in parameters:
+            db_url = anonymizer.eval_template_with_environment(config["db_url"])
+            where_clause = config.get("where", None)
+            if where_clause:
+                where_clause = anonymizer.eval_template_with_environment(where_clause)
+            schema = config.get("schema", None)
+            if schema:
+                schema = anonymizer.eval_template_with_environment(schema)
+
             for table in table_list:
                 anonymizer.anonymize_db_table(
-                    config["db_url"],
-                    config.get("schema", None), 
+                    db_url,
+                    schema, 
                     table, 
                     id_columns, 
-                    config.get("where", None), 
+                    where_clause, 
                     table_joins, 
                     config.get("columns", {}),
                     config.get("json_columns", {}),

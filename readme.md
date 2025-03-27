@@ -329,7 +329,7 @@ python anonymizer.py \
   }'
 ```
 
-Anonymize multiple tables with same configuration use ```tables``` and pass an array of table names.
+Anonymize multiple tables with same configuration use `tables` and pass an array of table names.
 
 ```bash
 python anonymizer.py \
@@ -365,7 +365,9 @@ python anonymizer.py \
 ##### Using JOIN'ed Database Tables
 
 For some more complicated where clauses, the table to be anonymized needs to be joined with another table.
-The target table (the one to be anonymized) is called `target_table`
+The target table (the one to be anonymized) is always aliased with `target_table`!
+
+The `join` syntax must also always have an alias for the joined table!
 
 With id column:
 
@@ -424,7 +426,8 @@ If a json string is contained in a database table, one can anonymize rows and js
 ```bash
 # anonymize db table and json strings in the database
 python anonymizer.py \
-  --config '{
+  --config '
+  {
     "db_url": "sqlite:///testfiles/my_database.db",
     "table": "persons",
     "id_column": "id",
@@ -435,7 +438,8 @@ python anonymizer.py \
         "$.person.lastname": "last_name"
       }
     }
-  }'
+  }
+  '
 ```
 
 #### Microsoft Sql Server
@@ -449,7 +453,7 @@ mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERV
 ```bash
 python anonymizer.py \
   --locale de_DE \
-  --config "
+  --config '
   {
     "db_url": "mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dtest-db%3BUID%3Dsa%3BPWD%3DDSmdM%40ORF1%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes",
     "schema": "dbo_anon",
@@ -461,7 +465,7 @@ python anonymizer.py \
       "lastName": "last_name"
     }
   }
-  "
+  '
 ```
 
 The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor problems on MSSql!
@@ -475,7 +479,7 @@ Instead of passing multiple config files on the command line, it might be easier
 
 ### Configuration Syntax
 
-The following shows all possible configuration properties. Not all of them make sense when used together (e.g. ```file``` and ```table```)!
+The following shows all possible configuration properties. Not all of them make sense when used together (e.g. `file` and `table`)!
 
 ```json
     {
@@ -505,9 +509,37 @@ The following shows all possible configuration properties. Not all of them make 
 
 ```
 
+### Usage of Environment Variables in Configuration
+
+Some configuration values can also use jinja2 template, especially the usage of special variables can be used to simplify the configuration.
+
+Due to the fact that withing single quotes other single quotes cannot be escaped, a different apporach is used to pass the configuration in the command line:
+
+```bash
+export DB_FILE=my_database.db
+export FILTER_COUNTRY=AT
+export NAME_SUFFIX=xyz
+python anonymizer.py --config "$(cat <<EOF
+{
+  "db_url": "sqlite:///testfiles/{{ env[\"DB_FILE\"] }}",
+  "table": "persons",
+  "where": "COUNTRY='{{ env[\"FILTER_COUNTRY\"] }}'",
+  "columns": {
+    "first_name": "first_name",
+    "last_name": "{{ faker.last_name() }}{{ env['NAME_SUFFIX'] }}"
+  }
+}
+EOF
+)"
+```
+
+Currently, jinja2 templates are only allowed in the `db_url`, `schema`, and in the `where` keys of the configuration.
+The `env` context is also usable in the anonymization value jinja2 templates.
+
 ## Special jinja2 Mechanism
 
 If a jinja2 template returns the string `"None"`, it is replaced by `None` (`null` value). Otherwise it would be impossible to set a (database column) value to `null`.
+
 
 ## Encoding
 
