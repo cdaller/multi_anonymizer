@@ -329,6 +329,39 @@ python anonymizer.py \
   }'
 ```
 
+Anonymize multiple tables with same configuration use ```tables``` and pass an array of table names.
+
+```bash
+python anonymizer.py \
+  --config '
+  {
+    "db_url": "sqlite:///testfiles/my_database.db",
+    "tables": ["persons", "employees"],
+    "id_column": "id",
+    "columns": {
+      "first_name": "first_name", 
+      "last_name": "last_name"
+    }
+  }
+  '
+```
+
+If no id column exists, the replacement is not done row-by-row but all values of the columns are read and each avlue is replaced by its anonymized version in bulk. So one update statement is executed for each different value.
+
+```bash
+python anonymizer.py \
+  --config '
+  {
+    "db_url": "sqlite:///testfiles/my_database.db",
+    "table": "persons",
+    "columns": {
+      "first_name": "first_name", 
+      "last_name": "last_name"
+    }
+  }
+  '
+```
+
 ##### Using JOIN'ed Database Tables
 
 For some more complicated where clauses, the table to be anonymized needs to be joined with another table.
@@ -438,7 +471,39 @@ Please note that bash requires double quotes to expand the environment variable,
 
 ## Config Files
 
-Instead of passing multiple config files on the comman line, it might be easier to define the configuration(s) in one or multiple files.
+Instead of passing multiple config files on the command line, it might be easier to define the configuration(s) in one or multiple files.
+
+### Configuration Syntax
+
+The following shows all possible configuration properties. Not all of them make sense when used together (e.g. ```file``` and ```table```)!
+
+```json
+    {
+        "enabled": true,
+        "db_url": "xxx",                // db: connection url
+        "schema": "xxx",                // db: schema
+        "table": "xxx",                 // db: table to anonymize
+        "tables": ["xxx" "yyy"],        // db: multiple db tables to anonymize
+        "id_column": "xxx",             // db: id column 
+        "id_columns": [ "xxx", "yyy" ], // db: multiple id columns
+        "where": "companyId = 40201",   // db: where clauses
+        "join": "xxx",                  // db: join
+        "joins": [ "xxx", "yyy" ],      // db: multiple joins
+        "columns": {                    // general: define columns to anonymize
+            "xxx": "yyy",               // general: column name and value, name can be column name or json/xml path expression
+            "zzz": {                    // general: column name and detailed value definition
+                "type": "xxx",          // general: type of anonymization
+                "params": {             // optional parameters for type
+                    "xxx": "yyy"        // parameter key/value
+                }
+            }
+        }
+        "separator": "x",               // csv: separator
+        "overwrite": false,             // files: overwrite original source file (csv, xml, json)
+    }
+]
+
+```
 
 ## Special jinja2 Mechanism
 
@@ -783,3 +848,5 @@ Available Faker methods:
   * include keep language (set in filename)
 * json
   * [ ] allow references to other json_path elements (like row['xy'])
+* config
+  * [ ] allow to set environment variables on execution that are replacing variables used in the configuration

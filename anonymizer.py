@@ -294,7 +294,10 @@ class DataAnonymizer:
         metadata = MetaData()
         # no need to load whole database table definitions! metadata.reflect(bind=engine)
         
-        table = Table(table_name, metadata, autoload_with=engine, schema=table_schema).alias('target_table')
+        table = Table(table_name, metadata, autoload_with=engine, schema=table_schema)
+        if len(joins) > 0:
+            # some sql servers do not support alias names on updates! So use them only if necessary (when using joins)
+            table = table.alias('target_table')
         Session = sessionmaker(bind=engine)
         with Session() as session:
 
@@ -303,9 +306,8 @@ class DataAnonymizer:
 
             count = 0
             if id_columns:
-                # workaround for sql server (cannot handle alias in update table query (and it is not needed anyway or tables with unique column ids))
                 update_table = Table(table_name, metadata, autoload_with=engine, schema=table_schema)
-                count = self.anonymize_db_with_id_column(session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns, xml_columns)
+                count = self.anonymize_db_with_id_column(session, table, table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns, xml_columns)
             else:
                 count = self.anonymize_db_without_id_column(session, table, where_clause, join_conditions, columns_to_anonymize)
 
@@ -412,7 +414,6 @@ class DataAnonymizer:
 
             query = self.add_where_clause(query, where_clause)
 
-
             # Select all distinct values in the column
             distinct_values = session.execute(query).scalars().all()
             anonymized_map = {}
@@ -428,6 +429,7 @@ class DataAnonymizer:
                         .values({column_name: bindparam('new_value')})
                     )
                 update_stmt = self.add_where_clause(update_stmt, where_clause)
+                self.sql_logger.debug(f"Executing update: {update_stmt}")
 
                 result = session.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])
                 count += result.rowcount
@@ -469,7 +471,7 @@ class DataAnonymizer:
             else:
                 print("Could not detect file type from the name. Supports *.csv, *.json and *.xml files!")
                 exit(-2)            
-        elif "table" in config:
+        elif "table" in config or "tables" in config:
             if 'db_url' not in config:
                 print("Database anonymization needs 'db_url' set!")
                 exit(-1)
@@ -482,17 +484,22 @@ class DataAnonymizer:
             if "join" in config:
                 table_joins.append(config["join"])
 
-            anonymizer.anonymize_db_table(
-                config["db_url"],
-                config.get("schema", None), 
-                config["table"], 
-                id_columns, 
-                config.get("where", None), 
-                table_joins, 
-                config.get("columns", {}),
-                config.get("json_columns", {}),
-                config.get("xml_columns", {}),
-            )
+            table_list = config.get("tables", [])
+            if "table" in config:
+                table_list.append(config["table"])
+
+            for table in table_list:
+                anonymizer.anonymize_db_table(
+                    config["db_url"],
+                    config.get("schema", None), 
+                    table, 
+                    id_columns, 
+                    config.get("where", None), 
+                    table_joins, 
+                    config.get("columns", {}),
+                    config.get("json_columns", {}),
+                    config.get("xml_columns", {}),
+                )
         
         # Save the faker cache at the end
         anonymizer._save_cache()
