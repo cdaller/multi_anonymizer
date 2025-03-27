@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS persons (
     last_name TEXT,
     age INTEGER,
     email TEXT,
+    country TEXT,
     json_data TEXT
 );
 '''
@@ -45,12 +46,15 @@ conn.commit()
 
 email_id = 1000
 
+countries = ['IT', 'AT']
+
 # Generate and insert fake names into the 'persons' table
 for person_id in range(1000, 1010):  # Adjust the number of entries you want to add
     first_name = fake.first_name()
     last_name = fake.last_name()
     age = fake.random_int(min=18, max=99)
     email = fake.word() + '@example.com'
+    country = fake.random_element(countries)
     json_obj = {
         "person": {
             "firstname": first_name,
@@ -61,8 +65,8 @@ for person_id in range(1000, 1010):  # Adjust the number of entries you want to 
     }
     json_string_pretty = json.dumps(json_obj, indent=4)
     
-    insert_query = "INSERT INTO persons (id, first_name, last_name, age, email, json_data) VALUES (?, ?, ?, ?, ?, ?)"
-    cursor.execute(insert_query, (person_id, first_name, last_name, age, email, json_string_pretty))
+    insert_query = "INSERT INTO persons (id, first_name, last_name, age, email, country, json_data) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    cursor.execute(insert_query, (person_id, first_name, last_name, age, email, country, json_string_pretty))
 
     # add an email for every person
     insert_query = "INSERT INTO emails (person_id, subject, email) VALUES (?, ?, ?)"
@@ -78,4 +82,4 @@ conn.commit()
 # Close the database connection
 conn.close()
 
-print("Database table 'persons' created and filled with fake names")
+print("Database tables 'persons' and 'emails' created and filled with fake values.")

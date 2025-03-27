@@ -289,7 +289,7 @@ class DataAnonymizer:
     
     def add_joins(self, query, join_conditions):
         for alias, join_table, on_clause in join_conditions:
-            print(f"Joining {alias} with {join_table} ON {on_clause}")
+            print(f"Joining {join_table} {alias} with {join_table} ON {on_clause}")
             query = query.join(join_table, text(on_clause))
         return query
 
