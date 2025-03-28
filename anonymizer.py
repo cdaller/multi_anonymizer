@@ -8,6 +8,8 @@ import logging
 from faker import Faker
 from jinja2 import Template
 from time import perf_counter
+import struct
+import sys
 
 # Lazy imports
 try:
@@ -31,9 +33,21 @@ try:
 except ImportError:
     create_engine = None
 
+try:
+    from azure.identity import AzureCliCredential
+    azure_identity_available = True
+except ImportError:
+    azure_identity_available = False
+
+try:
+    import pyodbc
+    pyodbc_available = True
+except ImportError:
+    pyodbc_available = False
+    pyodbc = None
 
 class DataAnonymizer:
-    def __init__(self, db_url=None, locale="en_US", encoding="utf-8", cache_file=None):
+    def __init__(self, db_url=None, locale="en_US", encoding="utf-8", cache_file=None, db_authentication=None):
         """Initialize the anonymizer with a database connection (if provided) and locale."""
         self.fake = Faker(locale)
         self.encoding = encoding
@@ -43,6 +57,9 @@ class DataAnonymizer:
         self.engine = None
         self.sql_logger = logging.getLogger('sql')
         self.json_logger = logging.getLogger('json')
+
+        self.db_url = db_url
+        self.db_authentication = db_authentication
 
         self.env_context = {"env": {key: value for key, value in os.environ.items()}}
 
@@ -293,18 +310,52 @@ class DataAnonymizer:
             query = query.join(join_table, text(on_clause))
         return query
 
-    def anonymize_db_table(self, db_url, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None):
+    def create_db_engine(self, db_url, db_authentication):
+        """Creates a SQLAlchemy engine for the given database URL."""
+        if not create_engine:
+            print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
+            return None
+
+        attrs_before = None
+
+        if db_authentication != "AzureActiveDirectory":
+            return create_engine(db_url)
+
+        if not azure_identity_available or not pyodbc_available:
+            print("For AzureActiveDirectory authentication, please install azure-identity and pyodbc first!")
+            sys.exit(-1)
+
+        # login using AzureActiveDirectory token:
+
+        # Use the cli credential to get a token after the user has signed in via the Azure CLI 'az login' command.
+        credential = AzureCliCredential()
+        databaseToken = credential.get_token('https://database.windows.net/')
+
+        # get bytes from token obtained
+        tokenb = bytes(databaseToken[0], "UTF-16-LE")
+        tokenstruct = struct.pack("=i", len(tokenb)) + tokenb;
+        SQL_COPT_SS_ACCESS_TOKEN = 1256 
+        attrs_before = {SQL_COPT_SS_ACCESS_TOKEN:tokenstruct}
+        #print(f'using authentication AzureActiveDirectory...', end="")
+
+        connection_string = db_url[len("mssql+pyodbc://?odbc_connect="):]
+        #print(f" connection string: {connection_string}")
+        connection = pyodbc.connect(connection_string, attrs_before=attrs_before)
+        #print(f" connected to database '{connection.getinfo(pyodbc.SQL_DATABASE_NAME)}'")
+        return create_engine(db_url, creator=lambda: connection)
+
+    def anonymize_db_table(self, db_url, db_authentication, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None):
         """Anonymizes a database table, including JSON and XML inside table columns."""
         table_full_name = f"{table_schema}.{table_name}" if table_schema else table_name
         print(f"Anonymizing table '{table_full_name}'...", flush=True, end="")
-
-        if not create_engine:
-            print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
-            return
         
         print(f" connecting...", end="", flush=True)
         start_time = perf_counter()
-        engine = create_engine(db_url)
+
+        engine = self.create_db_engine(db_url, db_authentication)
+        if engine is None:
+            return
+        
         metadata = MetaData()
         # no need to load whole database table definitions! metadata.reflect(bind=engine)
                 
@@ -469,7 +520,7 @@ class DataAnonymizer:
                 print(f"- {method}")
         exit(0)
 
-    def process_config(self, config, anonymizer):
+    def process_config(self, config):
 
         if "enabled" in config and not config["enabled"]:
             print("Config disabled. Skipping...")
@@ -478,16 +529,16 @@ class DataAnonymizer:
         if "file" in config:
             print(f"Anonymizing file '{config['file']}'...")
             if config["file"].endswith(".json"):
-                anonymizer.anonymize_json_file(config["file"], config["columns"], config.get("overwrite", False))
+                self.anonymize_json_file(config["file"], config["columns"], config.get("overwrite", False))
             elif config["file"].endswith(".xml"):
-                anonymizer.anonymize_xml_file(config["file"], config["columns"], config.get("overwrite", False))
+                self.anonymize_xml_file(config["file"], config["columns"], config.get("overwrite", False))
             elif config["file"].endswith(".csv"):
-                anonymizer.anonymize_csv(config["file"], config["columns"], config.get("overwrite", False), config.get("separator", ","))
+                self.anonymize_csv(config["file"], config["columns"], config.get("overwrite", False), config.get("separator", ","))
             else:
                 print("Could not detect file type from the name. Supports *.csv, *.json and *.xml files!")
                 exit(-2)            
         elif "table" in config or "tables" in config:
-            if 'db_url' not in config:
+            if 'db_url' not in config and self.db_url is None:
                 print("Database anonymization needs 'db_url' set!")
                 exit(-1)
 
@@ -504,17 +555,20 @@ class DataAnonymizer:
                 table_list.append(config["table"])
 
             # handle jinja2 templates in parameters:
-            db_url = anonymizer.eval_template_with_environment(config["db_url"])
+            db_url = self.eval_template_with_environment(config.get("db_url", self.db_url))
+            db_authentication = self.eval_template_with_environment(config.get("db_authenticatino", self.db_authentication))
+
             where_clause = config.get("where", None)
             if where_clause:
-                where_clause = anonymizer.eval_template_with_environment(where_clause)
+                where_clause = self.eval_template_with_environment(where_clause)
             schema = config.get("schema", None)
             if schema:
-                schema = anonymizer.eval_template_with_environment(schema)
+                schema = self.eval_template_with_environment(schema)
 
             for table in table_list:
-                anonymizer.anonymize_db_table(
+                self.anonymize_db_table(
                     db_url,
+                    db_authentication,
                     schema, 
                     table, 
                     id_columns, 
@@ -526,7 +580,7 @@ class DataAnonymizer:
                 )
         
         # Save the faker cache at the end
-        anonymizer._save_cache()
+        self._save_cache()
 
 
 
@@ -559,6 +613,8 @@ For further details and examples, see the readme.md file!
         formatter_class=argparse.RawTextHelpFormatter
     )
 
+    parser.add_argument("--db-url", help="The url to connect to the database server (for all configurations, if not overwritten in the configuratin itself).")
+    parser.add_argument("--db-authentication", help="The authentication used for database connections. The only value that is specially treated is 'AzureActiveDirectory'. If used, be sure to have pyodbc and azure-identity installed!")
     parser.add_argument("--config", nargs="+", help="JSON configurations as command-line arguments.")
     parser.add_argument("--config-file", nargs="+", help="Paths to JSON configuration files.")
     parser.add_argument("--locale", type=str, default="en_US", help="Set Faker's locale (default: en_US)")
@@ -571,7 +627,7 @@ For further details and examples, see the readme.md file!
 
     args = parser.parse_args()
 
-    anonymizer = DataAnonymizer(locale=args.locale, encoding=args.encoding, cache_file=args.cache_file)
+    anonymizer = DataAnonymizer(locale=args.locale, encoding=args.encoding, cache_file=args.cache_file, db_url=args.db_url, db_authentication=args.db_authentication)
 
     if args.list_faker_methods or args.list_faker_methods_and_examples:
         anonymizer.list_faker_methods(args.list_faker_methods_and_examples)
@@ -602,9 +658,9 @@ For further details and examples, see the readme.md file!
                 config = json.loads(config_str)
                 if isinstance(config, list):
                     for single_config in config:
-                        anonymizer.process_config(single_config, anonymizer)
+                        anonymizer.process_config(single_config)
                 else:
-                    anonymizer.process_config(config, anonymizer)
+                    anonymizer.process_config(config)
             except json.JSONDecodeError as e:
                 print(f"Error parsing JSON configuration: {e} in \n{config_str}")
                 exit(1)

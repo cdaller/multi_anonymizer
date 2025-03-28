@@ -59,6 +59,8 @@ pip install sqlalchemy sqlalchemy.orm
 pip install psycopg2-binary
 # mysql
 pip install pymysql
+# in case of azure identity is needed
+pip install azure-identity pyodbc
 
 # csv files 
 pip install pandas
@@ -485,6 +487,7 @@ The following shows all possible configuration properties. Not all of them make 
     {
         "enabled": true,
         "db_url": "xxx",                // db: connection url
+        "db_authenticatino": "xxx",     // db authentication: AzureActiveDirectory or None
         "schema": "xxx",                // db: schema
         "table": "xxx",                 // db: table to anonymize
         "tables": ["xxx" "yyy"],        // db: multiple db tables to anonymize
