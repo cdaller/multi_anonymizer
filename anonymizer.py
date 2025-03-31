@@ -63,7 +63,6 @@ class DataAnonymizer:
 
         self.env_context = {"env": {key: value for key, value in os.environ.items()}}
 
-
         # Load cache file if provided
         if self.cache_file:
             self._load_cache()
@@ -103,6 +102,11 @@ class DataAnonymizer:
                     continue
         return faker_methods
     
+    def _get_faker_value(self, faker_type, **kwargs):
+        value_method = getattr(self.fake, faker_type, None)
+        fake_value = value_method(**kwargs)
+        return fake_value
+    
     def _get_consistent_faker_value(self, original_value, faker_type, **kwargs):
         """Ensures that empty or null original values return empty or null faker values,
         and that the same original value gets the same anonymized value across all sources.
@@ -124,12 +128,8 @@ class DataAnonymizer:
             min_val = kwargs.get("min", 0)
             max_val = kwargs.get("max", 100)
             anonymized_value = self.fake.random_int(min=min_val, max=max_val)
-        elif faker_type == "zip_city":
-            min_val = kwargs.get("min", 0)
-            max_val = kwargs.get("max", 100)
-            anonymized_value = self.fake.random_int(min=min_val, max=max_val)
         elif faker_type in self.faker_methods:
-            anonymized_value = self.faker_methods[faker_type](**kwargs)
+            anonymized_value = self._get_faker_value(faker_type, **kwargs)
         else:
             anonymized_value = f"INVALID_FAKER_METHOD({faker_type})"
 
@@ -137,20 +137,20 @@ class DataAnonymizer:
         return anonymized_value
 
     
-    def faker_proxy(self):
+    def faker_jinja2_proxy(self):
         """Return a dictionary of Faker functions that can be used in Jinja2 templates."""
         return {method: (lambda *args, m=method, **kwargs: self.faker_methods[m](*args, **kwargs)) for method in self.faker_methods}
 
-    def anonymize_value(self, originial_value, faker_or_template, context={}):
+    def anonymize_value(self, original_value, faker_or_template, context={}):
         if isinstance(faker_or_template, dict) and "type" in faker_or_template:
-            anonymized_value = self._get_consistent_faker_value(originial_value, faker_or_template["type"], **faker_or_template.get("params", {}))
+            anonymized_value = self._get_consistent_faker_value(original_value, faker_or_template["type"], **faker_or_template.get("params", {}))
         elif faker_or_template in self.faker_methods:
-            anonymized_value = self._get_consistent_faker_value(originial_value, faker_or_template)
+            anonymized_value = self._get_consistent_faker_value(original_value, faker_or_template)
         else:
             template = Template(faker_or_template)
             # print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
             # add utils that handle null values better than jinja2 methods
-            anonymized_value = template.render(faker=self.faker_proxy(), row=context, re=re, str=str, int=int, len=len, **self.env_context)
+            anonymized_value = template.render(faker=self.faker_jinja2_proxy(), row=context, re=re, str=str, int=int, len=len, **self.env_context)
             if anonymized_value == "None":
                 anonymized_value = None
         return anonymized_value
@@ -506,16 +506,19 @@ class DataAnonymizer:
         return { "rows": count }
 
 
-    def list_faker_methods(self, with_example_values=True):
+    def list_faker_methods(self, show_example_values=True):
         """Print all available Faker methods and exit."""
         print("Available Faker methods:")
         for method in sorted(self.faker_methods.keys()):
-            if with_example_values:
+            if show_example_values:
                 try:
-                    example_value = self.faker_methods[method]() if method not in ["binary", "get_providers", "image", "items", "tar", "xml", "zip"] and not method.startswith("py") else "<skipped>"
+                    if method in ["binary", "get_providers", "image", "items", "tar", "xml", "zip"] or method.startswith("py"):
+                        example_value = "<data>"
+                    else:
+                        example_value = self._get_faker_value(method)
                 except TypeError:
                     example_value = "N/A"
-                print(f"- {method}: {example_value}")
+                print(f"{method}: {example_value}")
             else:
                 print(f"- {method}")
         exit(0)
