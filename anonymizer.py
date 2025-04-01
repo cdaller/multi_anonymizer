@@ -102,8 +102,12 @@ class DataAnonymizer:
                     continue
         return faker_methods
     
-    def _get_faker_value(self, faker_type, **kwargs):
-        value_method = getattr(self.fake, faker_type, None)
+    def _get_faker_value(self, faker_type, use_unique, **kwargs):
+        if use_unique:
+            # Use unique method if available
+            value_method = getattr(self.fake.unique, faker_type, None)
+        else:
+            value_method = getattr(self.fake, faker_type, None)
         fake_value = value_method(**kwargs)
         return fake_value
     
@@ -122,6 +126,14 @@ class DataAnonymizer:
 
         if original_value in self.faker_cache[faker_type]:
             return self.faker_cache[faker_type][original_value]
+        
+        # Check if the faker type should be unique
+        # Use unique/ prefix to indicate unique faker methods
+        # e.g., unique_email, unique_name
+        use_unique = False
+        if faker_type.startswith("unique/"):
+            use_unique = True
+            faker_type = faker_type[len("unique/"):]
 
         # Handle number anonymization with min/max
         if faker_type == "number":
@@ -129,7 +141,7 @@ class DataAnonymizer:
             max_val = kwargs.get("max", 100)
             anonymized_value = self.fake.random_int(min=min_val, max=max_val)
         elif faker_type in self.faker_methods:
-            anonymized_value = self._get_faker_value(faker_type, **kwargs)
+            anonymized_value = self._get_faker_value(faker_type, use_unique, **kwargs)
         else:
             anonymized_value = f"INVALID_FAKER_METHOD({faker_type})"
 
@@ -515,7 +527,7 @@ class DataAnonymizer:
                     if method in ["binary", "get_providers", "image", "items", "tar", "xml", "zip"] or method.startswith("py"):
                         example_value = "<data>"
                     else:
-                        example_value = self._get_faker_value(method)
+                        example_value = self._get_faker_value(method, False)
                 except TypeError:
                     example_value = "N/A"
                 print(f"{method}: {example_value}")
