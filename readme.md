@@ -543,7 +543,6 @@ The `env` context is also usable in the anonymization value jinja2 templates.
 
 If a jinja2 template returns the string `"None"`, it is replaced by `None` (`null` value). Otherwise it would be impossible to set a (database column) value to `null`.
 
-
 ## Encoding
 
 For xml, csv and json files, use the `--encoding` command line parameter to set the encoding, the files are read and written.
@@ -559,6 +558,16 @@ If consistency across multiple runs should be achieved, the mapping between orig
 ```bash
  ./anonymizer.py --locale de_AT --config-file db_anonymization.json --cache-file database_anonymization_de_AT.json
  ```
+
+## Unique Value Generation
+
+In case an anonymized value has to be unique, the faker method can be prefixed with `unique/`. This guarantees that all values created are unique and will not be repeated during a run.
+
+This comes handy if a database table has a unique key constraint on a column and duplicate values need to be prevented at any case.
+
+Please notice that for the most faker methods uniqueness might be hard to achieve as there are only a limited number of fake values available. For example, there are only 1000 last names available in faker. In this case, uniqueness cannot be achieved when there are more than 1000 values needed and an error is thrown.
+
+For other faker methods, this works better (like `ascii_company_email`). So using `unique/ascii_company_email` guarantees unique email addresses (as long as possible).
 
 ## Available Faker Methods
 
