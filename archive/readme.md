@@ -339,7 +339,7 @@ Note: for MSSql you need to install the odbc driver (on Linux/Mac) and then pass
 
 ```bash
 ./multi_anonymizer.py --type word \
-  --input "mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%3Dliferay-db%3BUID%3Dsa%3BPWD%3Dxxxx%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes:(input_type=db, schemeschema=dbo, table=User_, column=screenName)"
+  --input "mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERVER%3Dlocalhost%3BPORT%3D1433%3BDATABASE%user-db%3BUID%3Dsa%3BPWD%3Dxxxx%3BEncrypt%3DYES%3BTrustServerCertificate%3DYES;MARS_Connection%3DYes:(input_type=db, schemeschema=dbo, table=User_, column=screenName)"
 ```
 
 The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor problems on MSSql!
