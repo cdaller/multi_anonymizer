@@ -67,7 +67,7 @@ class DataAnonymizer:
         if self.cache_file:
             self._load_cache()
 
-    def _load_cache(self):
+    def _load_cache(self) -> None:
         """Loads the faker cache from a file if it exists."""
         if self.cache_file and os.path.exists(self.cache_file):
             try:
@@ -78,7 +78,7 @@ class DataAnonymizer:
                 print(f"⚠️ Warning: Failed to load faker cache from '{self.cache_file}': {e}")
                 self.faker_cache = {}
 
-    def _save_cache(self):
+    def _save_cache(self) -> None:
         """Saves the faker cache to a file at the end of execution."""
         if self.cache_file:
             try:
@@ -89,7 +89,7 @@ class DataAnonymizer:
                 print(f"⚠️ Warning: Failed to save faker cache to '{self.cache_file}': {e}")
 
 
-    def _get_faker_methods(self):
+    def _get_faker_methods(self) -> dict:
         """Fetch all available Faker methods, filtering out internal methods."""
         faker_methods = {}
         for method in dir(self.fake):
@@ -102,7 +102,7 @@ class DataAnonymizer:
                     continue
         return faker_methods
     
-    def _get_faker_value(self, faker_type, use_unique, **kwargs):
+    def _get_faker_value(self, faker_type, use_unique, **kwargs) -> str:
         if use_unique:
             # Use unique method if available
             value_method = getattr(self.fake.unique, faker_type, None)
@@ -111,7 +111,7 @@ class DataAnonymizer:
         fake_value = value_method(**kwargs)
         return fake_value
     
-    def _is_faker_type(self, faker_type) -> [bool, str, bool]:
+    def _is_faker_type(self, faker_type) -> tuple[bool, str, bool]:
         use_unique = False
         # Check if the faker type should be unique
         # Use unique/ prefix to indicate unique faker methods
@@ -154,11 +154,11 @@ class DataAnonymizer:
         return anonymized_value
 
     
-    def faker_jinja2_proxy(self):
+    def faker_jinja2_proxy(self) -> dict:
         """Return a dictionary of Faker functions that can be used in Jinja2 templates."""
         return {method: (lambda *args, m=method, **kwargs: self.faker_methods[m](*args, **kwargs)) for method in self.faker_methods}
 
-    def anonymize_value(self, original_value, faker_or_template, context={}):
+    def anonymize_value(self, original_value, faker_or_template, context={}) -> str:
         [is_faker_type, faker_type, use_unique] = self._is_faker_type(faker_or_template)
 
         if isinstance(faker_or_template, dict) and "type" in faker_or_template:
@@ -174,15 +174,15 @@ class DataAnonymizer:
                 anonymized_value = None
         return anonymized_value
 
-    def eval_template_with_environment(self, template):
+    def eval_template_with_environment(self, template) -> str:
         """Evaluates a Jinja2 template with environment variables."""
         return self.eval_template(template, context=self.env_context)
 
-    def eval_template(self, template, context={}):
+    def eval_template(self, template, context={}) -> str:
         """Evaluates a Jinja2 template with the provided context."""
         return Template(template).render(**context)
 
-    def anonymize_csv(self, file_path, columns_to_anonymize, overwrite=False, separator=","):
+    def anonymize_csv(self, file_path, columns_to_anonymize, overwrite=False, separator=",") -> None:
         """Anonymizes a CSV file using Faker and Jinja2 templates."""
         if not pd:
             print("Pandas is required for CSV anonymization. Install it with 'pip install pandas'.")
@@ -199,7 +199,7 @@ class DataAnonymizer:
         print(f"CSV file '{file_path}' anonymized {len(df)} rows. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
 
-    def anonymize_json_string(self, json_string, json_paths):
+    def anonymize_json_string(self, json_string: str, json_paths: dict) -> tuple[int, str]:
         """Anonymizes a JSON string using JSONPath."""
         if not json_parse:
             print("jsonpath-ng is required for JSON anonymization. Install it with 'pip install jsonpath-ng'.")
@@ -227,7 +227,7 @@ class DataAnonymizer:
         return (count, json.dumps(data, ensure_ascii=False, indent=4))  # Return anonymized JSON string
 
 
-    def anonymize_json_file(self, file_path, json_paths, overwrite=False):
+    def anonymize_json_file(self, file_path, json_paths, overwrite=False) -> None:
         """Anonymizes a JSON file using JSONPath."""
         if not json_parse:
             print("jsonpath-ng is required for JSON anonymization. Install it with 'pip install jsonpath-ng'.")
@@ -245,19 +245,20 @@ class DataAnonymizer:
         print(f"JSON file '{file_path}' anonymized {count} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
     
 
-    def anonymize_xml_string(self, xml_string, xml_paths):
+    def anonymize_xml_string(self, xml_string, xml_paths) -> tuple[int, str]:
         """Anonymizes an XML string using XPath."""
         if not etree:
             print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
             return xml_string
 
+        count = 0
+
         try:
             xml_tree = etree.fromstring(xml_string)
         except etree.XMLSyntaxError:
             print(f"Invalid XML!")
-            return xml_string  # Return unchanged if invalid XML
+            return (count, xml_string) # Return unchanged if invalid XML
 
-        count = 0
         for xpath, faker_or_template in xml_paths.items():
             if "@" in xpath:  # If XPath targets an attribute (e.g., //address/@id)
                 attr_xpath, attr_name = xpath.rsplit("/@", 1)
@@ -277,7 +278,7 @@ class DataAnonymizer:
 
         return (count, etree.tostring(xml_tree, encoding=self.encoding).decode())  # Return anonymized XML string
 
-    def anonymize_xml_file(self, file_path, xml_paths, overwrite=False):
+    def anonymize_xml_file(self, file_path, xml_paths, overwrite=False) -> None:
         """Anonymizes an XML file using XPath for both element text and attributes."""
         if not etree:
             print("lxml is required for XML anonymization. Install it with 'pip install lxml'.")
@@ -294,7 +295,7 @@ class DataAnonymizer:
 
         print(f"XML file '{file_path}' anonymized {count} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
-    def parse_sqlalchemy_joins(self, engine, metadata, table_alias, join_definitions):
+    def parse_sqlalchemy_joins(self, engine, metadata, table_alias, join_definitions) -> list:
         """Parses join definitions from CLI into SQLAlchemy joins."""
         join_tables = {}
         join_conditions = []
@@ -318,18 +319,18 @@ class DataAnonymizer:
 
         return join_conditions
     
-    def add_where_clause(self, query, where_clause):
+    def add_where_clause(self, query, where_clause) -> object: # return a Query
         if where_clause:
             query = query.where(text(where_clause))
         return query
     
-    def add_joins(self, query, join_conditions):
+    def add_joins(self, query, join_conditions) -> object: # return a Query
         for alias, join_table, on_clause in join_conditions:
             print(f"Joining {join_table} {alias} with {join_table} ON {on_clause}")
             query = query.join(join_table, text(on_clause))
         return query
 
-    def create_db_engine(self, db_url, db_authentication):
+    def create_db_engine(self, db_url, db_authentication) -> 'sqlalchemy.engine.Engine | None':
         """Creates a SQLAlchemy engine for the given database URL."""
         if not create_engine:
             print("SQLAlchemy is required for database anonymization. Install it with 'pip install sqlalchemy'.")
@@ -363,7 +364,7 @@ class DataAnonymizer:
         #print(f" connected to database '{connection.getinfo(pyodbc.SQL_DATABASE_NAME)}'")
         return create_engine(db_url, creator=lambda: connection)
 
-    def anonymize_db_table(self, db_url, db_authentication, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None):
+    def anonymize_db_table(self, db_url, db_authentication, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None) -> None:
         """Anonymizes a database table, including JSON and XML inside table columns."""
         table_full_name = f"{table_schema}.{table_name}" if table_schema else table_name
         print(f"Anonymizing table '{table_full_name}'...", flush=True, end="")
@@ -402,7 +403,7 @@ class DataAnonymizer:
         duration = perf_counter() - start_time
         print(f" DONE - anonymized {count} rows/values successfully in {duration:.2f} seconds")
 
-    def extract_column_names_from_template(self, template):
+    def extract_column_names_from_template(self, template) -> list:
         # Regular expression to extract keys inside row["..."] within Jinja2 curly braces
         pattern = r'\{\{[^}]*?row\[(?:\"|\')(.+?)(?:\"|\')\][^}]*?\}\}'
 
@@ -410,7 +411,7 @@ class DataAnonymizer:
         matches = re.findall(pattern, template)
         return matches
 
-    def anonymize_db_with_id_column(self, session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None):
+    def anonymize_db_with_id_column(self, session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None) -> int:
         # which columns to load:
         columns_to_load = set(id_columns)
         columns_to_load.update(json_columns.keys() if json_columns else [])
@@ -491,7 +492,7 @@ class DataAnonymizer:
         return count_result
 
 
-    def anonymize_db_without_id_column(self, session, table, where_clause, join_conditions, columns_to_anonymize):
+    def anonymize_db_without_id_column(self, session, table, where_clause, join_conditions, columns_to_anonymize) -> dict:
         count = 0
         for column_name, faker_or_template in columns_to_anonymize.items():
             column = getattr(table.c, column_name)
@@ -525,7 +526,7 @@ class DataAnonymizer:
         return { "rows": count }
 
 
-    def list_faker_methods(self, show_example_values=True):
+    def list_faker_methods(self, show_example_values=True) -> None:
         """Print all available Faker methods and exit."""
         print("Available Faker methods:")
         for method in sorted(self.faker_methods.keys()):
@@ -542,9 +543,9 @@ class DataAnonymizer:
                 print(f"- {method}")
         exit(0)
 
-    def process_config(self, config):
+    def process_config(self, config) -> None:
 
-        if "enabled" in config and not config["enabled"]:
+        if not config.get("enabled", True):
             print("Config disabled. Skipping...")
             return
 
@@ -578,7 +579,9 @@ class DataAnonymizer:
 
             # handle jinja2 templates in parameters:
             db_url = self.eval_template_with_environment(config.get("db_url", self.db_url))
-            db_authentication = self.eval_template_with_environment(config.get("db_authenticatino", self.db_authentication))
+            db_authentication = config.get("db_authentication", self.db_authentication)
+            if db_authentication:
+                db_authentication = self.eval_template_with_environment()
 
             where_clause = config.get("where", None)
             if where_clause:
@@ -691,7 +694,9 @@ For further details and examples, see the readme.md file!
         print("\nProcess interrupted. Exiting gracefully.")
         exit(0)
     except Exception as e:
+        import traceback
         print(f"An error occurred: {e}")
+        traceback.print_exc()
         exit(1)
 
 
