@@ -516,7 +516,7 @@ The following shows all possible configuration properties. Not all of them make 
 
 Some configuration values can also use jinja2 template, especially the usage of special variables can be used to simplify the configuration.
 
-Due to the fact that withing single quotes other single quotes cannot be escaped, a different apporach is used to pass the configuration in the command line:
+Due to the fact that one cannot escape single quotes within single quotes, a different approch is used to pass the configuration in the command line:
 
 ```bash
 export DB_FILE=my_database.db
@@ -568,6 +568,19 @@ This comes handy if a database table has a unique key constraint on a column and
 Please notice that for the most faker methods uniqueness might be hard to achieve as there are only a limited number of fake values available. For example, there are only 1000 last names available in faker. In this case, uniqueness cannot be achieved when there are more than 1000 values needed and an error is thrown.
 
 For other faker methods, this works better (like `ascii_company_email`). So using `unique/ascii_company_email` guarantees unique email addresses (as long as possible).
+
+```bash
+python anonymizer.py \
+--config '
+  {
+    "file": "testfiles/persons.csv",
+    "columns": {
+      "email": "unique/ascii_company_email"
+    },
+    "separator": ";"
+  }
+'
+```
 
 ## Available Faker Methods
 

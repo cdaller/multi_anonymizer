@@ -111,6 +111,17 @@ class DataAnonymizer:
         fake_value = value_method(**kwargs)
         return fake_value
     
+    def _is_faker_type(self, faker_type) -> [bool, str, bool]:
+        use_unique = False
+        # Check if the faker type should be unique
+        # Use unique/ prefix to indicate unique faker methods
+        # e.g., unique/email, unique/name
+        if faker_type.startswith("unique/"):
+            use_unique = True
+            faker_type = faker_type[len("unique/"):]
+        is_faker_type = faker_type in self.faker_methods
+        return [is_faker_type, faker_type, use_unique]
+            
     def _get_consistent_faker_value(self, original_value, faker_type, **kwargs):
         """Ensures that empty or null original values return empty or null faker values,
         and that the same original value gets the same anonymized value across all sources.
@@ -121,26 +132,20 @@ class DataAnonymizer:
         if isinstance(original_value, str) and original_value.strip() == "":
             return ""  # Keep empty strings as empty
 
+        [is_faker_type, faker_type, use_unique] = self._is_faker_type(faker_type)
+
         if faker_type not in self.faker_cache:
             self.faker_cache[faker_type] = {}
 
         if original_value in self.faker_cache[faker_type]:
             return self.faker_cache[faker_type][original_value]
         
-        # Check if the faker type should be unique
-        # Use unique/ prefix to indicate unique faker methods
-        # e.g., unique_email, unique_name
-        use_unique = False
-        if faker_type.startswith("unique/"):
-            use_unique = True
-            faker_type = faker_type[len("unique/"):]
-
         # Handle number anonymization with min/max
         if faker_type == "number":
             min_val = kwargs.get("min", 0)
             max_val = kwargs.get("max", 100)
             anonymized_value = self.fake.random_int(min=min_val, max=max_val)
-        elif faker_type in self.faker_methods:
+        elif is_faker_type:
             anonymized_value = self._get_faker_value(faker_type, use_unique, **kwargs)
         else:
             anonymized_value = f"INVALID_FAKER_METHOD({faker_type})"
@@ -154,9 +159,11 @@ class DataAnonymizer:
         return {method: (lambda *args, m=method, **kwargs: self.faker_methods[m](*args, **kwargs)) for method in self.faker_methods}
 
     def anonymize_value(self, original_value, faker_or_template, context={}):
+        [is_faker_type, faker_type, use_unique] = self._is_faker_type(faker_or_template)
+
         if isinstance(faker_or_template, dict) and "type" in faker_or_template:
             anonymized_value = self._get_consistent_faker_value(original_value, faker_or_template["type"], **faker_or_template.get("params", {}))
-        elif faker_or_template in self.faker_methods:
+        elif is_faker_type:
             anonymized_value = self._get_consistent_faker_value(original_value, faker_or_template)
         else:
             template = Template(faker_or_template)
