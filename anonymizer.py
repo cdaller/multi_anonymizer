@@ -159,19 +159,22 @@ class DataAnonymizer:
         return {method: (lambda *args, m=method, **kwargs: self.faker_methods[m](*args, **kwargs)) for method in self.faker_methods}
 
     def anonymize_value(self, original_value, faker_or_template, context={}) -> str:
-        [is_faker_type, faker_type, use_unique] = self._is_faker_type(faker_or_template)
 
         if isinstance(faker_or_template, dict) and "type" in faker_or_template:
             anonymized_value = self._get_consistent_faker_value(original_value, faker_or_template["type"], **faker_or_template.get("params", {}))
-        elif is_faker_type:
+            return anonymized_value
+        
+        [is_faker_type, _, _] = self._is_faker_type(faker_or_template)
+        if is_faker_type:
             anonymized_value = self._get_consistent_faker_value(original_value, faker_or_template)
-        else:
-            template = Template(faker_or_template)
-            # print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
-            # add utils that handle null values better than jinja2 methods
-            anonymized_value = template.render(faker=self.faker_jinja2_proxy(), row=context, re=re, str=str, int=int, len=len, **self.env_context)
-            if anonymized_value == "None":
-                anonymized_value = None
+            return anonymized_value
+        
+        template = Template(faker_or_template)
+        # print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
+        # add utils that handle null values better than jinja2 methods
+        anonymized_value = template.render(faker=self.faker_jinja2_proxy(), row=context, re=re, str=str, int=int, len=len, **self.env_context)
+        if anonymized_value == "None":
+            anonymized_value = None
         return anonymized_value
 
     def eval_template_with_environment(self, template) -> str:
