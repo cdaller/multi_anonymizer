@@ -67,6 +67,11 @@ class DataAnonymizer:
         if self.cache_file:
             self._load_cache()
 
+    def _get_current_datetime(self) -> str:
+        """Returns the current date and time as a formatted string."""
+        from datetime import datetime
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     def _load_cache(self) -> None:
         """Loads the faker cache from a file if it exists."""
         if self.cache_file and os.path.exists(self.cache_file):
@@ -199,7 +204,7 @@ class DataAnonymizer:
 
         output_file = file_path if overwrite else file_path.replace(".csv", "_anonymized.csv")
         df.to_csv(output_file, sep=separator, index=False, encoding=self.encoding)
-        print(f"CSV file '{file_path}' anonymized {len(df)} rows. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+        print(f"[{self._get_current_datetime()}] CSV file '{file_path}' anonymized {len(df)} rows. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
 
     def anonymize_json_string(self, json_string: str, json_paths: dict) -> tuple[int, str]:
@@ -245,7 +250,7 @@ class DataAnonymizer:
         with open(output_file, 'w', encoding=self.encoding) as file:
             file.write(anonymized_json)
 
-        print(f"JSON file '{file_path}' anonymized {count} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+        print(f"[{self._get_current_datetime()}] JSON file '{file_path}' anonymized {count} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
     
 
     def anonymize_xml_string(self, xml_string, xml_paths) -> tuple[int, str]:
@@ -257,9 +262,9 @@ class DataAnonymizer:
         count = 0
 
         try:
-            xml_tree = etree.fromstring(xml_string)
+            xml_tree = etree.fromstring(xml_string.encode(self.encoding))
         except etree.XMLSyntaxError:
-            print(f"Invalid XML!")
+            print(f"ERROR: Invalid XML!")
             return (count, xml_string) # Return unchanged if invalid XML
 
         for xpath, faker_or_template in xml_paths.items():
@@ -296,7 +301,7 @@ class DataAnonymizer:
         with open(output_file, 'w', encoding=self.encoding) as file:
             file.write(anonymized_xml)
 
-        print(f"XML file '{file_path}' anonymized {count} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
+        print(f"[{self._get_current_datetime()}] XML file '{file_path}' anonymized {count} elements. {'Overwritten' if overwrite else f'Saved as {output_file}'}.")
 
     def parse_sqlalchemy_joins(self, engine, metadata, table_alias, join_definitions) -> list:
         """Parses join definitions from CLI into SQLAlchemy joins."""
@@ -370,7 +375,8 @@ class DataAnonymizer:
     def anonymize_db_table(self, db_url, db_authentication, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None) -> None:
         """Anonymizes a database table, including JSON and XML inside table columns."""
         table_full_name = f"{table_schema}.{table_name}" if table_schema else table_name
-        print(f"Anonymizing table '{table_full_name}'...", flush=True, end="")
+        from datetime import datetime
+        print(f"[{self._get_current_datetime()}] Anonymizing table '{table_full_name}'...", flush=True, end="")
         
         print(f" connecting...", end="", flush=True)
         start_time = perf_counter()
@@ -418,7 +424,7 @@ class DataAnonymizer:
         # which columns to load:
         columns_to_load = set(id_columns)
         columns_to_load.update(json_columns.keys() if json_columns else [])
-        columns_to_load.update(xml_columns.keys() if json_columns else [])
+        columns_to_load.update(xml_columns.keys() if xml_columns else [])
         for col, faker_or_template in columns_to_anonymize.items():
             columns_to_load.add(col)
             if isinstance(faker_or_template, str):
@@ -470,7 +476,7 @@ class DataAnonymizer:
             # XML Column Anonymization
             if xml_columns:
                 for col, xml_paths in xml_columns.items():
-                    if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid XML string
+                    if col in row_dict:
                         (count, anonymized_xml) = self.anonymize_xml_string(row_dict[col], xml_paths)
                         anonymized_values[col] = anonymized_xml
                         count_xml += count
@@ -584,7 +590,7 @@ class DataAnonymizer:
             db_url = self.eval_template_with_environment(config.get("db_url", self.db_url))
             db_authentication = config.get("db_authentication", self.db_authentication)
             if db_authentication:
-                db_authentication = self.eval_template_with_environment()
+                db_authentication = self.eval_template_with_environment(db_authentication)
 
             where_clause = config.get("where", None)
             if where_clause:
