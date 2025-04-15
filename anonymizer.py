@@ -531,8 +531,9 @@ class DataAnonymizer:
         return count_result
 
 
-    def anonymize_db_without_id_column(self, session, table, where_clause, join_conditions, columns_to_anonymize) -> dict:
+    def anonymize_db_without_id_column(self, session, table, where_clause, join_conditions, columns_to_anonymize, block_size=1000) -> dict:
         count = 0
+
         for column_name, faker_or_template in columns_to_anonymize.items():
             column = getattr(table.c, column_name)
             query = select(column).distinct()
@@ -546,21 +547,29 @@ class DataAnonymizer:
                 anonymized_value = self.anonymize_value(original_value, faker_or_template)
                 anonymized_map[original_value] = anonymized_value
 
-            # Update table with anonymized values
-            for original_value, anonymized_value in anonymized_map.items():
+            # Process updates in bulk blocks
+            anonymized_items = list(anonymized_map.items())
+            for block_start in range(0, len(anonymized_items), block_size):
+                block_end = min(block_start + block_size, len(anonymized_items))
+                block_updates = anonymized_items[block_start:block_end]
+
                 update_stmt = (
-                        update(table)
-                        .where(table.c[column_name] == bindparam('orig_value'))
-                        .values({column_name: bindparam('new_value')})
+                    update(table)
+                    .where(
+                        and_(
+                            column == bindparam('orig_value'),
+                            text(where_clause) if where_clause else True
+                        )
                     )
-                update_stmt = self.add_where_clause(update_stmt, where_clause)
-                self.sql_logger.debug(f"Executing update: {update_stmt}")
+                    .values({column_name: bindparam('new_value')})
+                )
 
-                result = session.execute(update_stmt, [{"orig_value": original_value, "new_value": anonymized_value}])
-                count += result.rowcount
-                #print(f'replaced {column_name}: {original_value} with {anonymized_value}')
+                session.execute(update_stmt, [
+                    {"orig_value": original_value, "new_value": anonymized_value}
+                    for original_value, anonymized_value in block_updates
+                ])
 
-            # TODO: add xml/json??? Does not make sense without id column???
+                count += len(block_updates)
 
         return { "rows": count }
 
