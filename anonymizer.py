@@ -29,6 +29,7 @@ except ImportError:
 
 try:
     from sqlalchemy import create_engine, MetaData, Table, select, update, text, bindparam
+    from sqlalchemy.sql import and_
     from sqlalchemy.orm import sessionmaker
 except ImportError:
     create_engine = None
@@ -420,7 +421,7 @@ class DataAnonymizer:
         matches = re.findall(pattern, template)
         return matches
 
-    def anonymize_db_with_id_column(self, session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None) -> int:
+    def anonymize_db_with_id_column(self, session, table, update_table, id_columns, where_clause, join_conditions, columns_to_anonymize, json_columns=None, xml_columns=None, block_size=1000) -> int:
         # which columns to load:
         columns_to_load = set(id_columns)
         columns_to_load.update(json_columns.keys() if json_columns else [])
@@ -435,7 +436,7 @@ class DataAnonymizer:
         invalid_columns = columns_to_load - table_columns
         if invalid_columns:
             raise ValueError(f"Invalid columns specified: {', '.join(invalid_columns)}")
-                
+
         query = select(table)
         query = query.with_only_columns(*[table.c[col] for col in columns_to_load])
 
@@ -451,45 +452,74 @@ class DataAnonymizer:
         count_json = 0
         count_xml = 0
         print(f" processing {len(rows)} rows ..", end="", flush=True)
-        for row in rows:
-            row_dict = row._asdict()
-            anonymized_values = {}
 
-            # Standard column anonymization
-            for col, faker_or_template in columns_to_anonymize.items():
-                if col in row_dict:
-                    original_value = row_dict[col]
-                    # merge original row and already changed values - use this as a template context
-                    context = {**row_dict, **anonymized_values}
-                    anonymized_value = self.anonymize_value(original_value, faker_or_template, context)
-                    anonymized_values[col] = anonymized_value
+        # Process rows in bulk blocks
+        for block_start in range(0, len(rows), block_size):
+            block_end = min(block_start + block_size, len(rows))
+            block_rows = rows[block_start:block_end]
 
-            # JSON Column Anonymization
-            if json_columns:
-                for col, json_paths in json_columns.items():
-                    if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid JSON string
-                        self.json_logger.debug(f"Working on json in row { {id_col: row_dict.get(id_col) for id_col in id_columns} }")
-                        (count, anonymized_json) = self.anonymize_json_string(row_dict[col], json_paths)
-                        anonymized_values[col] = anonymized_json
-                        count_json += count
+            bulk_updates = []
 
-            # XML Column Anonymization
-            if xml_columns:
-                for col, xml_paths in xml_columns.items():
+            for row in block_rows:
+                row_dict = row._asdict()
+                anonymized_values = {}
+
+                # Standard column anonymization
+                for col, faker_or_template in columns_to_anonymize.items():
                     if col in row_dict:
-                        (count, anonymized_xml) = self.anonymize_xml_string(row_dict[col], xml_paths)
-                        anonymized_values[col] = anonymized_xml
-                        count_xml += count
+                        original_value = row_dict[col]
+                        # merge original row and already changed values - use this as a template context
+                        context = {**row_dict, **anonymized_values}
+                        anonymized_value = self.anonymize_value(original_value, faker_or_template, context)
+                        anonymized_values[col] = anonymized_value
 
-            if anonymized_values:
-                id_conditions = [update_table.c[id_col] == row_dict[id_col] for id_col in id_columns]
-                update_stmt = update(update_table).where(*id_conditions).values(**anonymized_values)
-                #self.sql_logger.debug(f"Executing update: {update_stmt}")
-                session.execute(update_stmt)
-            
-            row_count += 1
+                # JSON Column Anonymization
+                if json_columns:
+                    for col, json_paths in json_columns.items():
+                        if col in row_dict and isinstance(row_dict[col], str):  # Ensure it's a valid JSON string
+                            self.json_logger.debug(f"Working on json in row { {id_col: row_dict.get(id_col) for id_col in id_columns} }")
+                            (count, anonymized_json) = self.anonymize_json_string(row_dict[col], json_paths)
+                            anonymized_values[col] = anonymized_json
+                            count_json += count
+
+                # XML Column Anonymization
+                if xml_columns:
+                    for col, xml_paths in xml_columns.items():
+                        if col in row_dict:
+                            (count, anonymized_xml) = self.anonymize_xml_string(row_dict[col], xml_paths)
+                            anonymized_values[col] = anonymized_xml
+                            count_xml += count
+
+                if anonymized_values:
+                    id_conditions = {id_col: row_dict[id_col] for id_col in id_columns}
+                    bulk_updates.append({**id_conditions, **anonymized_values})
+
+            # Perform bulk update for the current block
+            if bulk_updates:
+                update_stmt = (
+                    update(update_table)
+                    .where(
+                        and_(
+                            *[
+                                update_table.c[id_col] == bindparam(f"orig_{id_col}")
+                                for id_col in id_columns
+                            ]
+                        )
+                    )
+                    .values({col: bindparam(f"new_{col}") for col in anonymized_values.keys()})
+                )
+
+                session.execute(update_stmt, [
+                    {f"orig_{id_col}": update[id_col] for id_col in id_columns} |
+                    {f"new_{col}": update[col] for col in anonymized_values.keys()}
+                    for update in bulk_updates
+                ])
+
+            # Print progress:
+            previous_percent = int(((row_count) / len(rows)) * 100)
+            row_count += len(block_rows)
             percent = int((row_count / len(rows)) * 100)
-            if row_count == len(rows) or (percent % 5 == 0 and percent != int(((row_count - 1) / len(rows)) * 100)):
+            if row_count == len(rows) or (percent - previous_percent > 5 and percent != previous_percent):
                 print(f"{percent}%..", end="", flush=True)
 
         print(f" {row_count} rows ", end="", flush=True)
