@@ -706,7 +706,7 @@ For further details and examples, see the readme.md file!
         anonymizer.list_faker_methods(args.list_faker_methods_and_examples)
 
     if not args.config and not args.config_file:
-        print("No configuration provided. Use --config/--configfile, or --list-faker-methods/--list-faker-methods-and-examples.")
+        print("No configuration provided. Use --config/--config-file, or --list-faker-methods/--list-faker-methods-and-examples.")
         return
 
     if args.debug_sql:
