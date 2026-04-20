@@ -1,6 +1,6 @@
 # Multi Anonymizer
 
-This is a completely rewrite (new syntax, better configurability, more faker methods supported) of the anonymizer. For the old version, see readme in the archive folder [[archive/readme.md]].
+This is a complete rewrite (new syntax, better configurability, more faker methods supported) of the anonymizer. For the old version, see readme in the archive folder [[archive/readme.md]].
 
 Allows to anonymize multiple fields in csv, json, xml files or database tables in one pass and in a consistent way.
 
