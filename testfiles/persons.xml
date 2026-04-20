@@ -37,5 +37,14 @@
     <lastname>Großbank GmbH</lastname>
     <address id=""></address>
   </person>
+  <person>
+    <lastname>Testaddress Empty Street</lastname>
+    <address id="127">
+      <street></street>
+      <city>Graz</city>
+      <zip>8010</zip>
+      <country code="AT">Austria</country>
+    </address>
+  </person>
 
 </addressbook>

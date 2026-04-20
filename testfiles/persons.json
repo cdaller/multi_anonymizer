@@ -58,6 +58,22 @@
             {
                 "lastname": "Großbank GmbH",
                 "firstname": null
+            },
+            {
+                "lastname": "Testaddress Empty Street",
+                "firstname": null,
+                 "address": [
+                    {
+                        "id": "127",
+                        "street": "",
+                        "city": "Graz",
+                        "zip": "8010",
+                        "country": {
+                            "code": "AT",
+                            "name": "Austria"
+                        }
+                    }
+                ]
             }
         ]
     }

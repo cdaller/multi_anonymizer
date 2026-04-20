@@ -21,7 +21,8 @@ python anonymizer.py \
       "$.addressbook.person[*].firstname": "first_name",
       "$.addressbook.person[*].lastname": "last_name",
       "$.addressbook.person[*].comment": "{{ faker.sentence() }}",
-      "$.addressbook.person[*].address[*].id": {"type": "number", "params": {"min": 1000, "max": 2000}}
+      "$.addressbook.person[*].address[*].id": {"type": "number", "params": {"min": 1000, "max": 2000}},
+      "$.addressbook.person[*].address[*].street": {"type": "street"}
     }
   }
 ' \
@@ -32,7 +33,8 @@ python anonymizer.py \
       "//person/firstname": "first_name",
       "//person/lastname": "last_name",
       "//person/comment": "{{ faker.sentence() }}",
-      "//address/@id": {"type": "number", "params": {"min": 1000, "max": 2000}}
+      "//address/@id": {"type": "number", "params": {"min": 1000, "max": 2000}},
+      "//address/street": {"type": "street"}
     }
   }
 '
