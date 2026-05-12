@@ -1,0 +1,23 @@
+[project]
+name = "multi-anonymizer"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "faker==40.4.0",
+    "jinja2==3.1.6",
+    # database (optional, adapt as needed for your database)
+    "sqlalchemy==2.0.46",
+    "psycopg2-binary==2.9.11",
+    "pymysql==1.1.2",
+    "pyodbc==5.3.0",
+    "azure-identity==1.25.2",
+    # CSV (optional, for CSV support)
+    "pandas==3.0.1",
+    # XML (optional, for XML support)
+    "lxml==6.0.2",
+    # JSON (optional, for JSON support)
+    "jsonpath-ng==1.7.0",
+]
+
+[dependency-groups]
+dev = []

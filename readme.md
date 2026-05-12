@@ -13,7 +13,7 @@ The configurations for the fields to anonymize are in json and can be passed via
 The following example shows how to anonymize a json and an xml file that both contain an addressbook with the same entries could be anonymizes, so that the same entries before will be equal (but anonymized) in the same way:
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "file": "testfiles/persons.json",
@@ -50,13 +50,35 @@ See below for the full list!
 
 ## Setup
 
-For full feature, install the  following packages. If no database support is needed, you can skip the sqlalchemy. Same is valid for json, xml and panda (for csv).
+### Using uv (recommended)
+
+[uv](https://docs.astral.sh/uv/) is a fast Python package manager. Install it once:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then install all dependencies and run the script:
+
+```bash
+# Install all dependencies into a local virtual environment
+uv sync
+
+# Run the anonymizer directly (no manual venv activation needed)
+uv run anonymizer.py --help
+```
+
+All dependencies (including optional ones for databases, CSV, JSON, XML) are declared in `pyproject.toml` and installed by `uv sync`.
+
+### Using pip
+
+If no database support is needed, you can skip `sqlalchemy`. Same applies to JSON, XML, and pandas (CSV).
 
 ```bash
 pip install faker jinja2 argparse
 # depending on the target systems to be anonymized, one needs to install packages:
-# sql  databases:
-pip install sqlalchemy sqlalchemy.orm 
+# sql databases:
+pip install sqlalchemy sqlalchemy.orm
 # postgresql
 pip install psycopg2-binary
 # mysql
@@ -64,11 +86,11 @@ pip install pymysql
 # in case of azure identity is needed
 pip install azure-identity pyodbc
 
-# csv files 
+# csv files
 pip install pandas
 
 # json files:
-pip install json jsonpath-ng
+pip install jsonpath-ng
 
 # xml files
 pip install lxml
@@ -76,14 +98,14 @@ pip install lxml
 
 ## Usage
 
-Simple anonymization of first/last name. The script tries to anonymize data so the resemblance to the origial is a close as possible. 
+Simple anonymization of first/last name. The script tries to anonymize data so the resemblance to the original is a close as possible.
 
 ### CSV Files
 
 So if there are two persons with the same last name in the csv file, they will get the same anonymized last name after anonymization! By default, the original source file is not modified, but a new file with the extended name `_anonymized` is created. Use `overwrite` to modify the original file.
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "file": "testfiles/persons.csv",
@@ -99,7 +121,7 @@ python anonymizer.py \
 Using a locale to define the anonymized value's location:
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --locale de_DE \
   --config '
   {
@@ -116,7 +138,7 @@ python anonymizer.py \
 Use a number column and give min/max for the number - this form uses a different syntax giving the faker type as `type`. This allows to add some parameters. Currently, `number` is the only type having parameters (`min` and `max`).
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "file": "testfiles/persons.csv",
@@ -137,7 +159,7 @@ python anonymizer.py \
 The notation using the "type" can be used also for other faker methods:
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "file": "testfiles/persons.csv",
@@ -154,7 +176,7 @@ python anonymizer.py \
 The following example shows the usage of a jinja2 template to fill the email address with the anonymized first- and last names of the persons.
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
 {
     "file": "testfiles/persons.csv",
@@ -173,7 +195,7 @@ Anonymized multiple csv files in one go:
 
 ```bash
 # anonymize two csv files at once and replace the address in a second csv file:
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "file": "testfiles/persons.csv",
@@ -199,7 +221,7 @@ python anonymizer.py \
 By default, faker uses a two line address. Use template variables to create an own address by the use of `street_address`, `postcode` and `city` faker methods:
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "file": "testfiles/addresses.csv",
@@ -216,7 +238,7 @@ python anonymizer.py \
 Json files can be anonymized by the use of json paths to define what and how to anonymize:
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "file": "testfiles/persons.json",
@@ -235,7 +257,7 @@ python anonymizer.py \
 Same can be done for xml files (xml elements and xml attributes) using xPath expressions:
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "file": "testfiles/persons.xml",
@@ -276,7 +298,7 @@ testfiles/create_sqlite.py testfiles/my_database.db
 sqlite3 testfiles/my_database.db "select * from persons"
 
 # anonymize db table
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "db_url": "sqlite:///testfiles/my_database.db",
@@ -289,7 +311,7 @@ python anonymizer.py \
   }
   '
 
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "db_url": "sqlite:///testfiles/my_database.db",
@@ -306,7 +328,7 @@ python anonymizer.py \
 Using a where clause to filter to specific rows in the database:
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "db_url": "sqlite:///testfiles/my_database.db",
@@ -320,7 +342,7 @@ python anonymizer.py \
 Using templates to anonymize column values consistently from other row values. Please note that the template may also contain non anonymized column values!
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '{
     "db_url": "sqlite:///testfiles/my_database.db",
     "table": "persons",
@@ -336,7 +358,7 @@ python anonymizer.py \
 Anonymize multiple tables with same configuration use `tables` and pass an array of table names.
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "db_url": "sqlite:///testfiles/my_database.db",
@@ -353,7 +375,7 @@ python anonymizer.py \
 If no id column exists, the replacement is not done row-by-row but all values of the columns are read and each avlue is replaced by its anonymized version in bulk. So one update statement is executed for each different value.
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "db_url": "sqlite:///testfiles/my_database.db",
@@ -376,7 +398,7 @@ The `join` syntax must also always have an alias for the joined table!
 With id column:
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "db_url": "sqlite:///testfiles/my_database.db",
@@ -410,7 +432,7 @@ testfiles/create_sqlite.py testfiles/my_database.db
 sqlite3 testfiles/my_database.db "select * from persons"
 
 # anonymize db table
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "db_url": "sqlite:///testfiles/my_database.db",
@@ -429,7 +451,7 @@ If a json string is contained in a database table, one can anonymize rows and js
 
 ```bash
 # anonymize db table and json strings in the database
-python anonymizer.py \
+uv run anonymizer.py \
   --config '
   {
     "db_url": "sqlite:///testfiles/my_database.db",
@@ -455,7 +477,7 @@ mssql+pyodbc://?odbc_connect=DRIVER%3D%7BODBC+Driver+18+for+SQL+Server%7D%3BSERV
 ```
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
   --locale de_DE \
   --config '
   {
@@ -524,7 +546,7 @@ Due to the fact that one cannot escape single quotes within single quotes, a dif
 export DB_FILE=my_database.db
 export FILTER_COUNTRY=AT
 export NAME_SUFFIX=xyz
-python anonymizer.py --config "$(cat <<EOF
+uv run anonymizer.py --config "$(cat <<EOF
 {
   "db_url": "sqlite:///testfiles/{{ env[\"DB_FILE\"] }}",
   "table": "persons",
@@ -572,7 +594,7 @@ Please notice that for the most faker methods uniqueness might be hard to achiev
 For other faker methods, this works better (like `ascii_company_email`). So using `unique/ascii_company_email` guarantees unique email addresses (as long as possible).
 
 ```bash
-python anonymizer.py \
+uv run anonymizer.py \
 --config '
   {
     "file": "testfiles/persons.csv",

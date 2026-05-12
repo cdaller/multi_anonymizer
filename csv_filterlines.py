@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 
 """
 CSV filter lines: reads a csv files, filters on a given expression and prints all lines that match 
