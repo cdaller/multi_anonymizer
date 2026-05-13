@@ -1,0 +1,50 @@
+<addressbook>
+  <person>
+    <lastname>Jones</lastname>
+    <firstname>Kristie</firstname>
+    <comment>Ever individual idea probably.</comment>
+    <address id="1176">
+      <street>Martinshügel 123</street>
+      <city>Linz</city>
+      <zip>4020</zip>
+      <country code="AT">Austria</country>
+    </address>
+    <address id="1258">
+      <street>Wherever 19</street>
+      <city>München</city>
+      <zip>12345</zip>
+      <country code="DE">Deutschland</country>
+    </address>
+  </person>
+  <person>
+    <lastname>Rivera</lastname>
+    <firstname>Devin</firstname>
+    <comment>Reason author star mission artist choice.</comment>
+    <address id="1152">
+      <street>Wienerstrasse 80</street>
+      <city>Graz</city>
+      <zip>1234</zip>
+      <country code="AT">Austria</country>
+    </address>
+    <address id="1613">
+      <street>Radetzkystrasse 5</street>
+      <city>Vöcklabruck</city>
+      <zip>4840</zip>
+      <country code="AT">Austria</country>
+    </address>
+  </person>
+  <person>
+    <lastname>Clark</lastname>
+    <address id=""/>
+  </person>
+  <person>
+    <lastname>Lopez</lastname>
+    <address id="1884">
+      <street/>
+      <city>Graz</city>
+      <zip>8010</zip>
+      <country code="AT">Austria</country>
+    </address>
+  </person>
+
+</addressbook>

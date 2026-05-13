@@ -1,0 +1,80 @@
+{
+    "addressbook": {
+        "person": [
+            {
+                "lastname": "Stokes",
+                "firstname": "Nicholas",
+                "comment": "Weight growth remember piece money agree become.",
+                "address": [
+                    {
+                        "id": 1183,
+                        "street": "INVALID_FAKER_METHOD(street)",
+                        "city": "Linz",
+                        "zip": "4020",
+                        "country": {
+                            "code": "AT",
+                            "name": "Austria"
+                        }
+                    },
+                    {
+                        "id": 1867,
+                        "street": "INVALID_FAKER_METHOD(street)",
+                        "city": "München",
+                        "zip": "12345",
+                        "country": {
+                            "code": "DE",
+                            "name": "Deutschland"
+                        }
+                    }
+                ]
+            },
+            {
+                "lastname": "Evans",
+                "firstname": "Tina",
+                "comment": "Start fire her.",
+                "address": [
+                    {
+                        "id": 1117,
+                        "street": "INVALID_FAKER_METHOD(street)",
+                        "city": "Graz",
+                        "zip": "1234",
+                        "country": {
+                            "code": "AT",
+                            "name": "Austria"
+                        }
+                    },
+                    {
+                        "id": 1164,
+                        "street": "INVALID_FAKER_METHOD(street)",
+                        "city": "Vöcklabruck",
+                        "zip": "4840",
+                        "country": {
+                            "code": "AT",
+                            "name": "Austria"
+                        }
+                    }
+                ]
+            },
+            {
+                "lastname": "Cox",
+                "firstname": null
+            },
+            {
+                "lastname": "Combs",
+                "firstname": null,
+                "address": [
+                    {
+                        "id": 1713,
+                        "street": "",
+                        "city": "Graz",
+                        "zip": "8010",
+                        "country": {
+                            "code": "AT",
+                            "name": "Austria"
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+}

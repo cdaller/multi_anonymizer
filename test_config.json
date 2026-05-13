@@ -1,0 +1,6 @@
+{
+  "file": "testfiles/test.xml",
+  "columns": {
+    "//Name": "name"
+  }
+}

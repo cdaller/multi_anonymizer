@@ -1,0 +1,10 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "anonymizer",
+            "database": "${workspaceFolder:multi_anonymizer}/testfiles/my_database.db"
+        }
+    ]
+}
