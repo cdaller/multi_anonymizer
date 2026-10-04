@@ -1,4 +1,23 @@
 #!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = [
+#     "faker==40.4.0",
+#     "jinja2==3.1.6",
+#     # database
+#     "sqlalchemy==2.0.46",
+#     "psycopg2-binary==2.9.11",
+#     "pymysql==1.1.2",
+#     "pyodbc==5.3.0",
+#     "azure-identity==1.25.2",
+#     # CSV
+#     "pandas==3.0.1",
+#     # XML
+#     "lxml==6.1.0",
+#     # JSON
+#     "jsonpath-ng==1.7.0",
+# ]
+# ///
 
 import argparse
 import json
@@ -373,6 +392,36 @@ class DataAnonymizer:
         #print(f" connected to database '{connection.getinfo(pyodbc.SQL_DATABASE_NAME)}'")
         return create_engine(db_url, creator=lambda: connection)
 
+    def test_db_connection(self, db_url, db_authentication) -> bool:
+        """Opens a connection to the database and closes it again without reading or writing any data."""
+        print(f"[{self._get_current_datetime()}] Testing database connection...", end="", flush=True)
+        try:
+            engine = self.create_db_engine(db_url, db_authentication)
+            if engine is None:
+                return False
+            print(f" '{engine.url.render_as_string(hide_password=True)}'...", end="", flush=True)
+            with engine.connect():
+                pass
+            engine.dispose()
+            print(" OK")
+            return True
+        except Exception as e:
+            print(f" FAILED: {e}")
+            return False
+
+    def test_db_config(self, config) -> bool:
+        """Tests the database connection of a table configuration. Other configurations are ignored."""
+        if not config.get("enabled", True) or ("table" not in config and "tables" not in config):
+            return True
+        if 'db_url' not in config and self.db_url is None:
+            print("Database anonymization needs 'db_url' set!")
+            return False
+        db_url = self.eval_template_with_environment(config.get("db_url", self.db_url))
+        db_authentication = config.get("db_authentication", self.db_authentication)
+        if db_authentication:
+            db_authentication = self.eval_template_with_environment(db_authentication)
+        return self.test_db_connection(db_url, db_authentication)
+
     def anonymize_db_table(self, db_url, db_authentication, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None) -> None:
         """Anonymizes a database table, including JSON and XML inside table columns."""
         table_full_name = f"{table_schema}.{table_name}" if table_schema else table_name
@@ -697,6 +746,7 @@ For further details and examples, see the readme.md file!
     parser.add_argument('--debug-sql', dest='debug_sql', default = False, action='store_true', help='If enabled, prints sql statements. (default: %(default)d)')
     parser.add_argument('--debug-json', dest='debug_json', default = False, action='store_true', help='If enabled, prints json infos. (default: %(default)d)')
     parser.add_argument("--cache-file", type=str, help="Set a file to store and reuse Faker anonymized values.")
+    parser.add_argument("--test-db", action="store_true", help="Only test the database connections (of --db-url and/or the table configurations) and exit. Nothing is read or written.")
 
     args = parser.parse_args()
 
@@ -704,6 +754,12 @@ For further details and examples, see the readme.md file!
 
     if args.list_faker_methods or args.list_faker_methods_and_examples:
         anonymizer.list_faker_methods(args.list_faker_methods_and_examples)
+
+    if args.test_db and not args.config and not args.config_file:
+        if not args.db_url:
+            print("--test-db needs --db-url or a configuration with 'db_url'.")
+            exit(1)
+        exit(0 if anonymizer.test_db_connection(args.db_url, args.db_authentication) else 1)
 
     if not args.config and not args.config_file:
         print("No configuration provided. Use --config/--config-file, or --list-faker-methods/--list-faker-methods-and-examples.")
@@ -726,17 +782,22 @@ For further details and examples, see the readme.md file!
                     print(f"Error reading configuration file: {e}")
                     exit(1)
 
+        db_test_ok = True
         for config_str in all_configs:
             try:
                 config = json.loads(config_str)
-                if isinstance(config, list):
-                    for single_config in config:
+                configs = config if isinstance(config, list) else [config]
+                for single_config in configs:
+                    if args.test_db:
+                        db_test_ok = anonymizer.test_db_config(single_config) and db_test_ok
+                    else:
                         anonymizer.process_config(single_config)
-                else:
-                    anonymizer.process_config(config)
             except json.JSONDecodeError as e:
                 print(f"Error parsing JSON configuration: {e} in \n{config_str}")
                 exit(1)
+
+        if args.test_db:
+            exit(0 if db_test_ok else 1)
 
     except KeyboardInterrupt:
         print("\nProcess interrupted. Exiting gracefully.")

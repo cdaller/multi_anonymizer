@@ -58,7 +58,13 @@ See below for the full list!
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Then install all dependencies and run the script:
+The script declares its dependencies inline ([PEP 723](https://peps.python.org/pep-0723/)) and has a `uv run --script` shebang, so it can be run directly from any directory. uv installs the dependencies automatically on the first run:
+
+```bash
+/path/to/anonymizer.py --help
+```
+
+Alternatively, install all dependencies into the project and run the script:
 
 ```bash
 # Install all dependencies into a local virtual environment
@@ -280,6 +286,13 @@ If only part of the table should be anonymized, the rows can be filtered using a
 Anonymizing database tables comes in two flavours:
 * tables with unique id column: The anonymizer reads all rows (`where` clause applied) and anonymizes all columns selected with their anonymization types.
 * tables without id column: as there is no unique id, the script cannot update row by row but needs to update all values in the selected columns (`where` clause is also applied).
+
+To only check if the database connection(s) work, without reading or writing any data, use `--test-db`. It tests the `--db-url` or the `db_url` of every table configuration and exits with code 1 if any connection fails:
+
+```bash
+./anonymizer.py --test-db --db-url sqlite:///testfiles/my_database.db
+./anonymizer.py --test-db --config-file db_anonymization.json
+```
 
 #### Database Tables with a unique id column
 
