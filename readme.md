@@ -511,6 +511,34 @@ The "MARS_Connection=YES" is necessary to prevent some strange SQLAlchemy cursor
 
 Please note that bash requires double quotes to expand the environment variable, but JSON also requires double quotes, so all double quotes need to be escaped in this example.
 
+#### Azure SQL Database with Username/Password
+
+Azure SQL databases with SQL authentication (username/password) use the same `mssql+pyodbc` driver as Microsoft Sql Server (the ODBC driver must be installed). No `db_authentication` is needed. Azure SQL requires an encrypted connection, so `Encrypt=yes` must be set.
+
+The credentials are read from environment variables, so they do not end up in the shell history or in config files. The `urlencode` filter is used, so special characters in username or password (like `@`, `:`, `;`) do not break the url:
+
+```bash
+export AZURE_SQL_USER=my-user
+export AZURE_SQL_PASSWORD='my-secret-password'
+uv run anonymizer.py --config "$(cat <<EOF
+{
+  "db_url": "mssql+pyodbc://{{ env['AZURE_SQL_USER'] | urlencode }}:{{ env['AZURE_SQL_PASSWORD'] | urlencode }}@my-server.database.windows.net:1433/my-database?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no&MARS_Connection=yes",
+  "schema": "dbo",
+  "table": "Users",
+  "id_column": "userId",
+  "columns": {
+    "firstName": "first_name",
+    "lastName": "last_name"
+  }
+}
+EOF
+)"
+```
+
+To only check the connection to the Azure SQL database, use `--test-db` with the same configuration.
+
+For Azure Active Directory (Entra ID) authentication instead of username/password, set `"db_authentication": "AzureActiveDirectory"`, log in with `az login` first and use the `mssql+pyodbc://?odbc_connect=...` url format (without `UID`/`PWD`) as shown in the Microsoft Sql Server section above.
+
 
 ## Config Files
 
