@@ -82,6 +82,8 @@ class DataAnonymizer:
 
         self.db_url = db_url
         self.db_authentication = db_authentication
+        self.keep_null = True  # keep NULL values NULL also for jinja2 templates, set per config
+        self.keep_empty = True  # keep empty strings empty also for jinja2 templates, set per config
 
         self.env_context = {"env": {key: value for key, value in os.environ.items()}}
 
@@ -203,7 +205,13 @@ class DataAnonymizer:
         if is_faker_type:
             anonymized_value = self._get_consistent_faker_value(original_value, faker_or_template)
             return anonymized_value
-        
+
+        if self.keep_null and original_value is None:
+            return None
+
+        if self.keep_empty and isinstance(original_value, str) and original_value.strip() == "":
+            return original_value
+
         template = self._get_template(faker_or_template)
         # print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
         # add utils that handle null values better than jinja2 methods
@@ -689,6 +697,9 @@ class DataAnonymizer:
         if not config.get("enabled", True):
             print("Config disabled. Skipping...")
             return
+
+        self.keep_null = config.get("keep_null", True)
+        self.keep_empty = config.get("keep_empty", True)
 
         if "file" in config:
             print(f"Anonymizing file '{config['file']}'...")

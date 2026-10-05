@@ -570,6 +570,8 @@ The following shows all possible configuration properties. Not all of them make 
                 }
             }
         }
+        "keep_null": true,              // general: NULL values stay NULL, also for jinja2 templates (default: true)
+        "keep_empty": true,             // general: empty strings stay empty, also for jinja2 templates (default: true)
         "separator": "x",               // csv: separator
         "overwrite": false,             // files: overwrite original source file (csv, xml, json)
     }
@@ -607,6 +609,11 @@ The `env` context is also usable in the anonymization value jinja2 templates.
 ## Special jinja2 Mechanism
 
 If a jinja2 template returns the string `"None"`, it is replaced by `None` (`null` value). Otherwise it would be impossible to set a (database column) value to `null`.
+
+## NULL and Empty Values
+
+Faker types never replace a `null` value or an empty (or blank) string. Jinja2 templates do not need the original value, so they would create a value even if the original is `null` or empty.
+By default (`"keep_null": true` and `"keep_empty": true`), `null` values and empty strings are kept for jinja2 templates as well. Set `"keep_null": false` and/or `"keep_empty": false` in a configuration to let templates fill them, e.g. for a column that is calculated from other columns.
 
 ## Encoding
 
