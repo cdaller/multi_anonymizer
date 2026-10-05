@@ -827,18 +827,20 @@ For further details and examples, see the readme.md file!
         
     try:
         # test all configs
-        all_configs = args.config if args.config else []
+        all_configs = [(None, config_str) for config_str in args.config] if args.config else []
         if args.config_file:
             for config_file in args.config_file:
                 try:
                     with open(config_file, 'r', encoding=args.encoding) as file:
-                        all_configs.append(file.read())
+                        all_configs.append((config_file, file.read()))
                 except FileNotFoundError as e:
                     print(f"Error reading configuration file: {e}")
                     exit(1)
 
         db_test_ok = True
-        for config_str in all_configs:
+        for config_file, config_str in all_configs:
+            if config_file:
+                print(f"Using configuration file '{config_file}'")
             try:
                 config = json.loads(config_str)
                 configs = config if isinstance(config, list) else [config]
