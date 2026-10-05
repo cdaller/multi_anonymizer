@@ -73,6 +73,8 @@ class DataAnonymizer:
         self.encoding = encoding
         self.faker_methods = self._get_faker_methods()
         self.faker_cache = {}  # Cache for consistent faker values
+        self.template_cache = {}  # Compiled jinja2 templates, keyed by template source
+        self._faker_proxy = None
         self.cache_file = cache_file
         self.engine = None
         self.sql_logger = logging.getLogger('sql')
@@ -181,7 +183,15 @@ class DataAnonymizer:
     
     def faker_jinja2_proxy(self) -> dict:
         """Return a dictionary of Faker functions that can be used in Jinja2 templates."""
-        return {method: (lambda *args, m=method, **kwargs: self.faker_methods[m](*args, **kwargs)) for method in self.faker_methods}
+        if self._faker_proxy is None:
+            self._faker_proxy = {method: (lambda *args, m=method, **kwargs: self.faker_methods[m](*args, **kwargs)) for method in self.faker_methods}
+        return self._faker_proxy
+
+    def _get_template(self, source) -> Template:
+        template = self.template_cache.get(source)
+        if template is None:
+            template = self.template_cache[source] = Template(source)
+        return template
 
     def anonymize_value(self, original_value, faker_or_template, context={}) -> str:
 
@@ -194,7 +204,7 @@ class DataAnonymizer:
             anonymized_value = self._get_consistent_faker_value(original_value, faker_or_template)
             return anonymized_value
         
-        template = Template(faker_or_template)
+        template = self._get_template(faker_or_template)
         # print(f" original_value: {originial_value}, faker_or_template: {faker_or_template}, rows: {context}")
         # add utils that handle null values better than jinja2 methods
         anonymized_value = template.render(faker=self.faker_jinja2_proxy(), row=context, re=re, str=str, int=int, len=len, **self.env_context)
@@ -366,8 +376,11 @@ class DataAnonymizer:
 
         attrs_before = None
 
+        # pyodbc sends one round trip per row on executemany by default; fast_executemany sends the whole block at once
+        engine_kwargs = {"fast_executemany": True} if db_url.startswith("mssql+pyodbc") else {}
+
         if db_authentication != "AzureActiveDirectory":
-            return create_engine(db_url)
+            return create_engine(db_url, **engine_kwargs)
 
         if not azure_identity_available or not pyodbc_available:
             print("For AzureActiveDirectory authentication, please install azure-identity and pyodbc first!")
@@ -390,7 +403,7 @@ class DataAnonymizer:
         #print(f" connection string: {connection_string}")
         connection = pyodbc.connect(connection_string, attrs_before=attrs_before)
         #print(f" connected to database '{connection.getinfo(pyodbc.SQL_DATABASE_NAME)}'")
-        return create_engine(db_url, creator=lambda: connection)
+        return create_engine(db_url, creator=lambda: connection, **engine_kwargs)
 
     def test_db_connection(self, db_url, db_authentication) -> bool:
         """Opens a connection to the database and closes it again without reading or writing any data."""
@@ -462,6 +475,19 @@ class DataAnonymizer:
         duration = perf_counter() - start_time
         print(f" DONE - anonymized {count} rows/values successfully in {duration:.2f} seconds")
 
+    def _format_eta(self, remaining_seconds) -> str:
+        """Formats remaining seconds as 'HH:MM:SS - <duration>', e.g. '08:30:05 - 5min'."""
+        from datetime import datetime, timedelta
+        finish_time = (datetime.now() + timedelta(seconds=remaining_seconds)).strftime("%H:%M:%S")
+        minutes = round(remaining_seconds / 60)
+        if remaining_seconds < 60:
+            duration = f"{int(remaining_seconds)}s"
+        elif minutes < 60:
+            duration = f"{minutes}min"
+        else:
+            duration = f"{minutes // 60}h {minutes % 60}min"
+        return f"{finish_time} - {duration}"
+
     def extract_column_names_from_template(self, template) -> list:
         # Regular expression to extract keys inside row["..."] within Jinja2 curly braces
         pattern = r'\{\{[^}]*?row\[(?:\"|\')(.+?)(?:\"|\')\][^}]*?\}\}'
@@ -495,11 +521,19 @@ class DataAnonymizer:
         self.sql_logger.debug(f"Executing query: {query}")
         rows = session.execute(query).fetchall()
 
+        # NULLs in id columns usually mean the id columns are not a real key of the table
+        null_id_cols = {col for row in rows for col in id_columns if row._mapping[col] is None}
+        if null_id_cols:
+            print(f" WARNING: NULL values in id columns {', '.join(sorted(null_id_cols))}", end="", flush=True)
+
         count_result = {}
 
         row_count = 0
         count_json = 0
         count_xml = 0
+        last_printed_percent = 0
+        eta_text = ""
+        processing_start = perf_counter()
         print(f" processing {len(rows)} rows ..", end="", flush=True)
 
         # Process rows in bulk blocks
@@ -550,7 +584,8 @@ class DataAnonymizer:
                     .where(
                         and_(
                             *[
-                                update_table.c[id_col] == bindparam(f"orig_{id_col}")
+                                # NULL-safe: '=' never matches a NULL id value, so such rows would silently stay unchanged
+                                update_table.c[id_col].is_not_distinct_from(bindparam(f"orig_{id_col}"))
                                 for id_col in id_columns
                             ]
                         )
@@ -565,11 +600,20 @@ class DataAnonymizer:
                 ])
 
             # Print progress:
-            previous_percent = int(((row_count) / len(rows)) * 100)
             row_count += len(block_rows)
             percent = int((row_count / len(rows)) * 100)
-            if row_count == len(rows) or (percent - previous_percent > 5 and percent != previous_percent):
-                print(f"{percent}%..", end="", flush=True)
+            if row_count == len(rows) or percent - last_printed_percent >= 5:
+                # erase the previous ETA with backspaces, then print the new percentage and ETA
+                erase = "\b" * len(eta_text) + " " * len(eta_text) + "\b" * len(eta_text)
+                separator = ".." if last_printed_percent > 0 else ""
+                if row_count == len(rows):
+                    eta_text = ""
+                    print(f"{erase}{separator}{percent}%..", end="", flush=True)
+                else:
+                    remaining_seconds = (perf_counter() - processing_start) / row_count * (len(rows) - row_count)
+                    eta_text = f" (ETA {self._format_eta(remaining_seconds)})"
+                    print(f"{erase}{separator}{percent}%{eta_text}", end="", flush=True)
+                last_printed_percent = percent
 
         print(f" {row_count} rows ", end="", flush=True)
         count_result['rows'] = row_count
