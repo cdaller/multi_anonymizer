@@ -26,7 +26,7 @@ import os
 import logging
 from faker import Faker
 from jinja2 import Template
-from time import perf_counter
+from time import perf_counter, sleep
 import struct
 import sys
 
@@ -50,8 +50,10 @@ try:
     from sqlalchemy import create_engine, MetaData, Table, select, update, text, bindparam
     from sqlalchemy.sql import and_
     from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.exc import OperationalError as SqlAlchemyOperationalError
 except ImportError:
     create_engine = None
+    SqlAlchemyOperationalError = None
 
 try:
     from azure.identity import AzureCliCredential
@@ -65,6 +67,11 @@ try:
 except ImportError:
     pyodbc_available = False
     pyodbc = None
+
+# a table that failed with a network error (timeout, connection reset) is anonymized again with exponential backoff -
+# safe, as all changes of a table are committed in one transaction, so a failed attempt is rolled back completely
+TABLE_RETRIES = 5
+TABLE_RETRY_DELAY_SECONDS = 5
 
 class DataAnonymizer:
     def __init__(self, db_url=None, locale="en_US", encoding="utf-8", cache_file=None, db_authentication=None):
@@ -443,7 +450,21 @@ class DataAnonymizer:
             db_authentication = self.eval_template_with_environment(db_authentication)
         return self.test_db_connection(db_url, db_authentication)
 
-    def anonymize_db_table(self, db_url, db_authentication, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None) -> None:
+    def anonymize_db_table(self, *args, **kwargs) -> None:
+        """Anonymizes a database table and retries it on transient network errors (OperationalError), doubling the delay after every attempt."""
+        retryable = tuple(e for e in (SqlAlchemyOperationalError, pyodbc.OperationalError if pyodbc else None) if e)
+        delay = TABLE_RETRY_DELAY_SECONDS
+        for attempt in range(1, TABLE_RETRIES + 1):
+            try:
+                return self._anonymize_db_table_once(*args, **kwargs)
+            except retryable as e:
+                if attempt == TABLE_RETRIES:
+                    raise
+                print(f"\n⚠️ Warning: table failed (attempt {attempt}/{TABLE_RETRIES}): {getattr(e, "orig", e)} - retrying in {delay}s...", flush=True)
+                sleep(delay)
+                delay *= 2
+
+    def _anonymize_db_table_once(self, db_url, db_authentication, table_schema, table_name, id_columns, where_clause, joins, columns_to_anonymize, json_columns=None, xml_columns=None) -> None:
         """Anonymizes a database table, including JSON and XML inside table columns."""
         table_full_name = f"{table_schema}.{table_name}" if table_schema else table_name
         from datetime import datetime
